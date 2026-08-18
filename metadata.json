@@ -1,0 +1,6 @@
+{
+  "name": "ThreadInvest",
+  "description": "Clothing business investment platform connecting investors with trending streetwear, jackets, hoodies, and denim projects.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

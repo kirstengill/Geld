@@ -1,6 +1,13 @@
 export type NetworkOperator = 'MTN' | 'Airtel';
 
-export type TransactionType = 'topup' | 'withdraw' | 'investment' | 'return_payout';
+export type TransactionType =
+  | 'topup'
+  | 'withdraw'
+  | 'investment'
+  | 'return_payout'
+  | 'signup_bonus'
+  | 'referral_reward'
+  | 'daily_reward';
 
 export type TransactionStatus = 'pending' | 'approved' | 'rejected';
 
@@ -13,6 +20,11 @@ export interface User {
   balance: number;
   joinedDate: string;
   email?: string;
+  // Referral & reward extensions (added by the referral/rewards feature)
+  referralCode?: string;            // unique, permanent code for this user
+  referredBy?: string;              // user id of the referrer (set once, immutable)
+  signupBonusGiven?: boolean;       // idempotency guard for the welcome bonus
+  lastDailyRewardClaim?: number;    // epoch ms of the last daily reward claim
 }
 
 export interface ClothingProject {
@@ -71,10 +83,16 @@ export interface TransactionRequest {
   processedAt?: string;
   notes?: string;
   referenceId: string;
+  createdAtTimestamp?: number; // epoch ms for precise ordering / cooldown math
 }
 
 export type AppView = 'landing' | 'signin' | 'signup' | 'dashboard' | 'admin';
 
-export type DashboardTab = 'dashboard' | 'investments' | 'wallet';
+export type DashboardTab =
+  | 'dashboard'
+  | 'investments'
+  | 'wallet'
+  | 'referral'
+  | 'rewards';
 
 export type AdminTab = 'overview' | 'approvals' | 'users' | 'projects';

@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
-import { Lock, User } from 'lucide-react';
+import { Lock, User, Gift } from 'lucide-react';
+import { REFERRAL_SIGNUP_STORAGE_KEY } from '../config/rewards';
 
 export const SignUpPage: React.FC = () => {
   const { signUp, setCurrentView, showToast } = useApp();
@@ -11,6 +12,20 @@ export const SignUpPage: React.FC = () => {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [agreeTerms, setAgreeTerms] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
+
+  // Referral code carried through the signup flow.
+  // Detected from the URL (?ref=...) or session storage so it survives refreshes.
+  const [referralCode, setReferralCode] = useState<string>('');
+
+  useEffect(() => {
+    const fromUrl = new URLSearchParams(window.location.search).get('ref') || '';
+    const fromSession = sessionStorage.getItem(REFERRAL_SIGNUP_STORAGE_KEY) || '';
+    const code = fromSession || fromUrl;
+    if (code) {
+      setReferralCode(code);
+      sessionStorage.setItem(REFERRAL_SIGNUP_STORAGE_KEY, code);
+    }
+  }, []);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -38,7 +53,11 @@ export const SignUpPage: React.FC = () => {
 
     setIsLoading(true);
     setTimeout(() => {
-      signUp(fullName, username, password);
+      const created = signUp(fullName, username, password, referralCode || undefined);
+      if (created) {
+        // Referral relationship is now recorded against this new account; clear it.
+        sessionStorage.removeItem(REFERRAL_SIGNUP_STORAGE_KEY);
+      }
       setIsLoading(false);
     }, 400);
   };
@@ -61,10 +80,22 @@ export const SignUpPage: React.FC = () => {
             Thread<span className="text-violet-600">Invest</span>
           </div>
           <h2 className="text-2xl font-bold text-slate-900">Create Investor Account</h2>
-          <p className="text-xs text-slate-500">
-            Join the community of verified apparel micro-investors in Uganda
-          </p>
-        </div>
+           <p className="text-xs text-slate-500">
+             Join the community of verified apparel micro-investors in Uganda
+           </p>
+         </div>
+
+         {/* Referral indicator (shown when signing up via a referral link) */}
+         {referralCode && (
+           <div className="bg-violet-50 border border-violet-100 rounded-xl p-3 flex items-center gap-2.5 text-xs">
+             <Gift className="w-4 h-4 text-violet-600 shrink-0" />
+             <div className="text-slate-700">
+               Signing up with referral code{' '}
+               <span className="font-extrabold text-violet-700">{referralCode}</span>.
+               Your referrer will receive a reward when your account is created.
+             </div>
+           </div>
+         )}
 
         {/* Form strictly requires: Full Name, Username, Password, Confirm Password */}
         <form onSubmit={handleSubmit} className="space-y-4">

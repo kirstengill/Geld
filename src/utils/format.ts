@@ -24,3 +24,17 @@ export const formatUGXCompact = (amount: number | undefined | null): string => {
   }
   return `UGX ${Math.round(amount).toLocaleString('en-US')}`;
 };
+
+export const formatDuration = (ms: number | null | undefined): string => {
+  if (ms === null || ms === undefined || isNaN(ms) || ms <= 0) return '0s';
+  const total = Math.floor(ms);
+  const days = Math.floor(total / 86400000);
+  const hours = Math.floor((total % 86400000) / 3600000);
+  const minutes = Math.floor((total % 3600000) / 60000);
+  const seconds = Math.floor((total % 60000) / 1000);
+
+  if (days > 0) return `${days}d ${hours}h ${minutes}m`;
+  if (hours > 0) return `${hours}h ${minutes}m`;
+  if (minutes > 0) return `${minutes}m ${seconds}s`;
+  return `${seconds}s`;
+};

@@ -24,8 +24,11 @@ import {
   CreditCard,
   Clock,
   Shirt,
-  Info
+  Info,
+  Gift
 } from 'lucide-react';
+import { ReferralCard } from '../components/ReferralCard';
+import { RewardsCard } from '../components/RewardsCard';
 
 export const UserDashboardPage: React.FC = () => {
   const { 
@@ -211,6 +214,32 @@ export const UserDashboardPage: React.FC = () => {
                   {pendingTransactions.length}
                 </span>
               )}
+            </button>
+
+            <button
+              id="sidebar-tab-referral"
+              onClick={() => setDashboardTab('referral')}
+              className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl font-semibold text-sm transition cursor-pointer ${
+                dashboardTab === 'referral'
+                  ? 'bg-violet-50 text-violet-700 shadow-xs border border-violet-100'
+                  : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+              }`}
+            >
+              <Gift className="w-4 h-4" />
+              <span>Refer &amp; Earn</span>
+            </button>
+
+            <button
+              id="sidebar-tab-rewards"
+              onClick={() => setDashboardTab('rewards')}
+              className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl font-semibold text-sm transition cursor-pointer ${
+                dashboardTab === 'rewards'
+                  ? 'bg-violet-50 text-violet-700 shadow-xs border border-violet-100'
+                  : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+              }`}
+            >
+              <Sparkles className="w-4 h-4" />
+              <span>Daily Rewards</span>
             </button>
           </nav>
         </div>
@@ -1007,10 +1036,13 @@ export const UserDashboardPage: React.FC = () => {
                             <tr key={tx.id} className="hover:bg-slate-50/50 transition">
                               <td className="py-3.5">
                                 <div className="font-bold text-slate-900">
-                                  {tx.type === 'topup' && 'Deposit / Top Up'}
-                                  {tx.type === 'withdraw' && 'Payout / Withdrawal'}
-                                  {tx.type === 'investment' && 'Project Stake'}
-                                  {tx.type === 'return_payout' && 'Maturity Payout'}
+                                {tx.type === 'topup' && 'Deposit / Top Up'}
+                                {tx.type === 'withdraw' && 'Payout / Withdrawal'}
+                                {tx.type === 'investment' && 'Project Stake'}
+                                {tx.type === 'return_payout' && 'Maturity Payout'}
+                                {tx.type === 'signup_bonus' && 'Signup Bonus'}
+                                {tx.type === 'referral_reward' && 'Referral Reward'}
+                                {tx.type === 'daily_reward' && 'Daily Reward'}
                                 </div>
                                 <div className="text-[11px] text-slate-400 font-mono">{tx.referenceId}</div>
                               </td>
@@ -1061,6 +1093,24 @@ export const UserDashboardPage: React.FC = () => {
             </div>
           )}
         </div>
+
+        {/* ===================================================================== */}
+        {/* TAB: REFERRAL — Refer & Earn */}
+        {/* ===================================================================== */}
+        {dashboardTab === 'referral' && (
+          <div className="space-y-6">
+            <ReferralCard />
+          </div>
+        )}
+
+        {/* ===================================================================== */}
+        {/* TAB: REWARDS — Daily Rewards */}
+        {/* ===================================================================== */}
+        {dashboardTab === 'rewards' && (
+          <div className="space-y-6">
+            <RewardsCard />
+          </div>
+        )}
       </main>
 
       {/* ========================================================================= */}
@@ -1135,6 +1185,44 @@ export const UserDashboardPage: React.FC = () => {
             )}
           </div>
           <span className="text-[10px] mt-1">Wallet</span>
+        </button>
+
+        {/* Referral Tab */}
+        <button
+          id="mobile-nav-referral-tab"
+          onClick={() => setDashboardTab('referral')}
+          className={`flex flex-col items-center justify-center py-1 px-3 rounded-xl transition cursor-pointer ${
+            dashboardTab === 'referral'
+              ? 'text-violet-600 font-extrabold scale-105'
+              : 'text-slate-500 hover:text-slate-900 font-medium'
+          }`}
+        >
+          <div className="relative">
+            <Gift className="w-5 h-5" />
+            {dashboardTab === 'referral' && (
+              <span className="w-1.5 h-1.5 rounded-full bg-violet-600 absolute -bottom-1 left-1/2 -translate-x-1/2" />
+            )}
+          </div>
+          <span className="text-[10px] mt-1">Refer</span>
+        </button>
+
+        {/* Rewards Tab */}
+        <button
+          id="mobile-nav-rewards-tab"
+          onClick={() => setDashboardTab('rewards')}
+          className={`flex flex-col items-center justify-center py-1 px-3 rounded-xl transition cursor-pointer ${
+            dashboardTab === 'rewards'
+              ? 'text-violet-600 font-extrabold scale-105'
+              : 'text-slate-500 hover:text-slate-900 font-medium'
+          }`}
+        >
+          <div className="relative">
+            <Sparkles className="w-5 h-5" />
+            {dashboardTab === 'rewards' && (
+              <span className="w-1.5 h-1.5 rounded-full bg-violet-600 absolute -bottom-1 left-1/2 -translate-x-1/2" />
+            )}
+          </div>
+          <span className="text-[10px] mt-1">Rewards</span>
         </button>
       </nav>
     </div>

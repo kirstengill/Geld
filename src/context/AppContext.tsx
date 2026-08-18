@@ -15,7 +15,19 @@ import {
   INITIAL_INVESTMENTS, 
   INITIAL_TRANSACTIONS 
 } from '../mockData';
-import { formatUGX } from '../utils/format';
+import { formatUGX, formatDuration } from '../utils/format';
+import {
+  generateReferralCode,
+  collectExistingReferralCodes
+} from '../utils/referral';
+import {
+  SIGNUP_BONUS_UGX,
+  DAILY_REWARD_UGX,
+  REFERRAL_REWARD_UGX,
+  DAILY_REWARD_COOLDOWN_MS,
+  DAILY_REWARD_WINDOW_LABEL,
+  REFERRAL_SIGNUP_STORAGE_KEY
+} from '../config/rewards';
 
 interface ToastMessage {
   id: string;
@@ -68,15 +80,37 @@ interface AppContextType {
   rejectTransaction: (transactionId: string, reason?: string) => void;
   createClothingProject: (projectData: Omit<ClothingProject, 'id' | 'raisedAmount' | 'investorsCount' | 'status'>) => void;
   updateUserBalanceDirect: (userId: string, newBalance: number) => void;
+
+  // Rewards & Referrals
+  claimDailyReward: () => { success: boolean; error?: string; newBalance?: number };
+  referralRewardAmount: number;
+  signupBonusAmount: number;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
+// In-flight claim guard: prevents the same user from having two daily-reward
+// claims process concurrently (double-click / replay protection at the logic layer).
+const claimingUsers = new Set<string>();
+
 export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   // Load from localStorage or clean defaults (all mock users removed)
+  // On first load with the referral feature, backfill a unique referral code for
+  // any pre-existing user that does not yet have one (does not touch balances).
   const [users, setUsers] = useState<User[]>(() => {
     const saved = localStorage.getItem('threadinvest_users_ugx_v2');
-    return saved ? JSON.parse(saved) : INITIAL_USERS;
+    const parsed: User[] = saved ? JSON.parse(saved) : INITIAL_USERS;
+    const existingCodes = collectExistingReferralCodes(parsed);
+    let migrated = false;
+    const migratedUsers = parsed.map(u => {
+      if (u.referralCode) return u;
+      migrated = true;
+      return { ...u, referralCode: generateReferralCode(existingCodes) };
+    });
+    if (migrated) {
+      localStorage.setItem('threadinvest_users_ugx_v2', JSON.stringify(migratedUsers));
+    }
+    return migratedUsers;
   });
 
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
@@ -101,7 +135,24 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     return saved ? parseInt(saved, 10) : 1;
   });
 
-  const [currentView, setCurrentView] = useState<AppView>('landing');
+  const [currentView, setCurrentView] = useState<AppView>(() => {
+    // Support direct deep-linking into the existing signup route, including the
+    // referral parameter (e.g. https://domain/signup?ref=NEST-8F42K).
+    // The ref code is preserved across refreshes via session storage.
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const ref = params.get('ref');
+      if (ref) {
+        sessionStorage.setItem(REFERRAL_SIGNUP_STORAGE_KEY, ref);
+      }
+      if (window.location.pathname.includes('/signup') || ref) {
+        return 'signup';
+      }
+    } catch {
+      // ignore — fall through to landing
+    }
+    return 'landing';
+  });
   const [dashboardTab, setDashboardTab] = useState<DashboardTab>('dashboard');
   const [adminTab, setAdminTab] = useState<AdminTab>('overview');
 
@@ -189,7 +240,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     return true;
   };
 
-  const signUp = (fullName: string, username: string, password?: string): boolean => {
+  const signUp = (fullName: string, username: string, password?: string, referralCode?: string): boolean => {
     const cleanUsername = username.trim().toLowerCase();
     const existing = users.find(u => u.username.toLowerCase() === cleanUsername);
     if (existing) {
@@ -197,21 +248,105 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       return false;
     }
 
+    const now = Date.now();
+    const nowDateOnly = new Date(now).toISOString().split('T')[0];
+
+    // Generate a unique referral code for the new user.
+    const existingCodes = collectExistingReferralCodes(users);
+    const newReferralCode = generateReferralCode(existingCodes);
+
+    // Resolve the referring user (if any) by referral code.
+    // Self-referral is structurally impossible: the new account does not exist yet,
+    // so its code cannot match a code already on an existing user.
+    let referrer: User | undefined;
+    if (referralCode) {
+      referrer = users.find(u => u.referralCode === referralCode && u.username.toLowerCase() !== cleanUsername);
+    }
+
+    // Transaction records built atomically alongside the balance updates below.
+    const newTx: TransactionRequest[] = [];
+
+    newTx.push({
+      id: `tx-bonus-${now}-${cleanUsername}`,
+      userId: '',
+      userName: '',
+      userUsername: cleanUsername,
+      type: 'signup_bonus',
+      amount: SIGNUP_BONUS_UGX,
+      status: 'approved',
+      createdAt: new Date(now).toLocaleString(),
+      createdAtTimestamp: now,
+      notes: 'Welcome signup bonus — first-time account credit',
+      referenceId: `BONUS-${Math.floor(10000 + Math.random() * 90000)}`
+    });
+
+    const newUserId = `user-${now}`;
+
+    // Build the new user object. Balance starts at the one-time signup bonus.
     const newUser: User = {
-      id: `user-${Date.now()}`,
+      id: newUserId,
       fullName: fullName.trim(),
       username: cleanUsername,
       password: password ? password.trim() : undefined,
       avatarUrl: `https://api.dicebear.com/7.x/avataaars/svg?seed=${cleanUsername}`,
-      balance: 0, // Initial balance 0 UGX
-      joinedDate: new Date().toISOString().split('T')[0],
-      email: `${cleanUsername}@threadinvest.io`
+      balance: SIGNUP_BONUS_UGX,
+      joinedDate: nowDateOnly,
+      email: `${cleanUsername}@threadinvest.io`,
+      referralCode: newReferralCode,
+      signupBonusGiven: true,
+      referredBy: referrer ? referrer.id : undefined
     };
 
-    setUsers(prev => [...prev, newUser]);
-    setCurrentUserId(newUser.id);
+    // Referral reward transaction (credited to the referrer, recorded now,
+    // balance applied atomically with the user upsert below).
+    if (referrer && referrer.id !== newUserId) {
+      newTx.push({
+        id: `tx-ref-${now}-${cleanUsername}`,
+        userId: referrer.id,
+        userName: referrer.fullName,
+        userUsername: referrer.username,
+        type: 'referral_reward',
+        amount: REFERRAL_REWARD_UGX,
+        status: 'approved',
+        createdAt: new Date(now).toLocaleString(),
+        createdAtTimestamp: now,
+        notes: `Referral reward for ${newUser.fullName} (@${newUser.username})`,
+        referenceId: `REF-${Math.floor(10000 + Math.random() * 90000)}`
+      });
+    }
+
+    // Set the bonus transaction's userId now that we know the new user id.
+    const signupBonusTx = newTx.find(t => t.type === 'signup_bonus');
+    if (signupBonusTx) signupBonusTx.userId = newUser.id;
+
+    // Atomic state update: append the new user AND credit the referrer in one pass.
+    // This prevents partial/duplicate wallet mutations.
+    setUsers(prev => {
+      let next = prev;
+      if (referrer && referrer.id !== newUserId) {
+        next = prev.map(u => {
+          if (u.id === referrer.id) {
+            return { ...u, balance: u.balance + REFERRAL_REWARD_UGX };
+          }
+          return u;
+        });
+      }
+      next = [...next, newUser];
+      // Update the signup-bonus transaction userId (same array reference as used below).
+      return next;
+    });
+
+    if (newTx.length > 0) {
+      setTransactions(prev => [...newTx, ...prev]);
+    }
+
+    setCurrentUserId(newUserId);
     setCurrentView('dashboard');
-    showToast('success', 'Account Created!', `Welcome to ThreadInvest, ${newUser.fullName}! Balance: ${formatUGX(0)}. Top up via MTN or Airtel Money to start investing.`);
+    showToast(
+      'success',
+      'Account Created!',
+      `Welcome to ThreadInvest, ${newUser.fullName}! ${formatUGX(SIGNUP_BONUS_UGX)} signup bonus added to your wallet. Your referral code: ${newReferralCode}`
+    );
     return true;
   };
 
@@ -296,6 +431,68 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       `Your payout request for ${formatUGX(amount)} to ${operator} (${phoneNumber}) is Pending Admin Approval.`
     );
     return { success: true };
+  };
+
+  // Rewards: Daily reward claim.
+  // All eligibility + credit logic lives in this state layer (the project's data
+  // authority for localStorage). The UI cannot directly mutate balances.
+  const claimDailyReward = (): { success: boolean; error?: string; newBalance?: number } => {
+    if (!currentUser) {
+      return { success: false, error: 'You must be signed in to claim a reward.' };
+    }
+    // In-flight guard against double-submission of the same claim (e.g. double clicks).
+    if (claimingUsers.has(currentUser.id)) {
+      return { success: false, error: 'Reward claim is already being processed.' };
+    }
+
+    const now = Date.now();
+    const last = currentUser.lastDailyRewardClaim ?? 0;
+    if (last > 0 && (now - last) < DAILY_REWARD_COOLDOWN_MS) {
+      const remaining = DAILY_REWARD_COOLDOWN_MS - (now - last);
+      return {
+        success: false,
+        error: `Next reward available in ${formatDuration(remaining)}`
+      };
+    }
+
+    claimingUsers.add(currentUser.id);
+    try {
+      const tx: TransactionRequest = {
+        id: `tx-daily-${now}`,
+        userId: currentUser.id,
+        userName: currentUser.fullName,
+        userUsername: currentUser.username,
+        type: 'daily_reward',
+        amount: DAILY_REWARD_UGX,
+        status: 'approved',
+        createdAt: new Date(now).toLocaleString(),
+        createdAtTimestamp: now,
+        notes: `Daily reward (${DAILY_REWARD_WINDOW_LABEL})`,
+        referenceId: `DAILY-${Math.floor(10000 + Math.random() * 90000)}`
+      };
+
+      // Atomic: credit balance + stamp last claim timestamp in a single update.
+      setUsers(prev => prev.map(u => {
+        if (u.id === currentUser.id) {
+          return {
+            ...u,
+            balance: u.balance + DAILY_REWARD_UGX,
+            lastDailyRewardClaim: now
+          };
+        }
+        return u;
+      }));
+      setTransactions(prev => [tx, ...prev]);
+
+      showToast(
+        'success',
+        'Daily Reward Claimed! 🎉',
+        `${formatUGX(DAILY_REWARD_UGX)} added to your wallet.`
+      );
+      return { success: true, newBalance: (currentUser.balance || 0) + DAILY_REWARD_UGX };
+    } finally {
+      claimingUsers.delete(currentUser.id);
+    }
   };
 
   // Investment Methods
@@ -742,11 +939,14 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         submitWithdrawRequest,
         investInProject,
         advanceSimulationDay,
-        approveTransaction,
+         approveTransaction,
         rejectTransaction,
         createClothingProject,
-        updateUserBalanceDirect
-      }}
+        updateUserBalanceDirect,
+        claimDailyReward,
+        referralRewardAmount: REFERRAL_REWARD_UGX,
+        signupBonusAmount: SIGNUP_BONUS_UGX
+       }}
     >
       {children}
     </AppContext.Provider>

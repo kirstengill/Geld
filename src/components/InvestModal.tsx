@@ -28,8 +28,8 @@ export const InvestModal: React.FC = () => {
     if (!hasSufficientBalance) return;
 
     setIsProcessing(true);
-    setTimeout(() => {
-      const res = investInProject(project.id, numAmount, selectedPeriod);
+    setTimeout(async () => {
+      const res = await investInProject(project.id, numAmount, selectedPeriod);
       setIsProcessing(false);
       if (res.success) {
         setJustInvested(true);

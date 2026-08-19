@@ -25,6 +25,7 @@ export interface User {
   referredBy?: string;              // user id of the referrer (set once, immutable)
   signupBonusGiven?: boolean;       // idempotency guard for the welcome bonus
   lastDailyRewardClaim?: number;    // epoch ms of the last daily reward claim
+  isAdmin?: boolean;                // admin privilege flag
 }
 
 export interface ClothingProject {

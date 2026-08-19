@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
 import { AdminTab, ClothingProject, NetworkOperator } from '../types';
 import { formatUGX, formatUGXCompact } from '../utils/format';
@@ -32,8 +32,39 @@ export const AdminDashboardPage: React.FC = () => {
     investments,
     createClothingProject,
     updateUserBalanceDirect,
-    showToast
+    showToast,
+    currentUser,
+    loading
   } = useApp();
+
+  const [isProcessing, setIsProcessing] = useState(false);
+
+  useEffect(() => {
+    if (!loading && currentUser) {
+      const profile = currentUser as any;
+      if (!profile.isAdmin) {
+        // Non-admin users should not access admin dashboard
+      }
+    }
+  }, [currentUser, loading]);
+
+  if (!loading && (!currentUser || !currentUser.isAdmin)) {
+    return (
+      <div className="min-h-screen bg-slate-900 text-slate-100 flex items-center justify-center">
+        <div className="text-center space-y-4">
+          <ShieldAlert className="w-16 h-16 text-red-500 mx-auto" />
+          <h1 className="text-2xl font-black text-white">Access Denied</h1>
+          <p className="text-slate-400 text-sm">You do not have admin privileges.</p>
+          <button
+            onClick={() => setCurrentView('dashboard')}
+            className="px-6 py-3 bg-violet-600 hover:bg-violet-700 text-white font-bold rounded-xl transition cursor-pointer"
+          >
+            Return to Dashboard
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   // New Project Form state
   const [newTitle, setNewTitle] = useState('');
@@ -68,8 +99,8 @@ export const AdminDashboardPage: React.FC = () => {
     }
 
     setIsCreatingProject(true);
-    setTimeout(() => {
-      createClothingProject({
+    setTimeout(async () => {
+      await createClothingProject({
         title: newTitle.trim(),
         category: newCategory,
         tagline: newTagline.trim() || `Exclusive ${newCategory} production release.`,
@@ -88,7 +119,6 @@ export const AdminDashboardPage: React.FC = () => {
         daysLeft: 30
       });
 
-      // Reset form
       setNewTitle('');
       setNewTagline('');
       setNewDescription('');
@@ -333,8 +363,13 @@ export const AdminDashboardPage: React.FC = () => {
                             {/* APPROVE BUTTON (Auto updates user balance) */}
                             <button
                               id={`admin-approve-tx-${tx.id}`}
-                              onClick={() => approveTransaction(tx.id)}
-                              className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-lg transition flex items-center gap-1 shadow-xs cursor-pointer"
+                              onClick={async () => {
+                                setIsProcessing(true);
+                                await approveTransaction(tx.id);
+                                setIsProcessing(false);
+                              }}
+                              disabled={isProcessing}
+                              className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-lg transition flex items-center gap-1 shadow-xs cursor-pointer disabled:opacity-50"
                             >
                               <Check className="w-3.5 h-3.5" />
                               <span>Approve</span>
@@ -343,8 +378,13 @@ export const AdminDashboardPage: React.FC = () => {
                             {/* REJECT BUTTON */}
                             <button
                               id={`admin-reject-tx-${tx.id}`}
-                              onClick={() => rejectTransaction(tx.id)}
-                              className="px-3 py-1.5 bg-rose-600/30 hover:bg-rose-600 text-rose-300 hover:text-white border border-rose-600/50 font-bold rounded-lg transition flex items-center gap-1 cursor-pointer"
+                              onClick={async () => {
+                                setIsProcessing(true);
+                                await rejectTransaction(tx.id);
+                                setIsProcessing(false);
+                              }}
+                              disabled={isProcessing}
+                              className="px-3 py-1.5 bg-rose-600/30 hover:bg-rose-600 text-rose-300 hover:text-white border border-rose-600/50 font-bold rounded-lg transition flex items-center gap-1 cursor-pointer disabled:opacity-50"
                             >
                               <X className="w-3.5 h-3.5" />
                               <span>Reject</span>
@@ -548,18 +588,28 @@ export const AdminDashboardPage: React.FC = () => {
                             <td className="py-3.5 text-slate-300">{userInvs.length} ongoing</td>
                             <td className="py-3.5 text-right">
                               <div className="inline-flex items-center gap-1.5">
-                                <button
-                                  onClick={() => updateUserBalanceDirect(u.id, u.balance + 50000)}
-                                  className="px-2 py-1 bg-slate-800 hover:bg-slate-700 text-white rounded text-[11px] font-bold cursor-pointer"
-                                >
-                                  +50k
-                                </button>
-                                <button
-                                  onClick={() => updateUserBalanceDirect(u.id, Math.max(0, u.balance - 50000))}
-                                  className="px-2 py-1 bg-slate-800 hover:bg-slate-700 text-rose-300 rounded text-[11px] font-bold cursor-pointer"
-                                >
-                                  -50k
-                                </button>
+                                 <button
+                                   onClick={async () => {
+                                     setIsProcessing(true);
+                                     await updateUserBalanceDirect(u.id, u.balance + 50000);
+                                     setIsProcessing(false);
+                                   }}
+                                   disabled={isProcessing}
+                                   className="px-2 py-1 bg-slate-800 hover:bg-slate-700 text-white rounded text-[11px] font-bold cursor-pointer disabled:opacity-50"
+                                 >
+                                   +50k
+                                 </button>
+                                 <button
+                                   onClick={async () => {
+                                     setIsProcessing(true);
+                                     await updateUserBalanceDirect(u.id, Math.max(0, u.balance - 50000));
+                                     setIsProcessing(false);
+                                   }}
+                                   disabled={isProcessing}
+                                   className="px-2 py-1 bg-slate-800 hover:bg-slate-700 text-rose-300 rounded text-[11px] font-bold cursor-pointer disabled:opacity-50"
+                                 >
+                                   -50k
+                                 </button>
                               </div>
                             </td>
                           </tr>

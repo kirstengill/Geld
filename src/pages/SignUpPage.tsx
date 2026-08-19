@@ -52,10 +52,9 @@ export const SignUpPage: React.FC = () => {
     }
 
     setIsLoading(true);
-    setTimeout(() => {
-      const created = signUp(fullName, username, password, referralCode || undefined);
+    setTimeout(async () => {
+      const created = await signUp(fullName, username, password, referralCode || undefined);
       if (created) {
-        // Referral relationship is now recorded against this new account; clear it.
         sessionStorage.removeItem(REFERRAL_SIGNUP_STORAGE_KEY);
       }
       setIsLoading(false);

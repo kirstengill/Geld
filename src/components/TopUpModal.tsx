@@ -35,8 +35,8 @@ export const TopUpModal: React.FC = () => {
     if (isNaN(numAmount) || numAmount <= 0) return;
 
     setIsSubmitting(true);
-    setTimeout(() => {
-      submitTopUpRequest(operator, phoneNumber, numAmount);
+    setTimeout(async () => {
+      await submitTopUpRequest(operator, phoneNumber, numAmount);
       setIsSubmitting(false);
     }, 400);
   };

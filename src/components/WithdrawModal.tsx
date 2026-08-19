@@ -46,8 +46,8 @@ export const WithdrawModal: React.FC = () => {
     }
 
     setIsSubmitting(true);
-    setTimeout(() => {
-      submitWithdrawRequest(operator, phoneNumber, numAmount);
+    setTimeout(async () => {
+      await submitWithdrawRequest(operator, phoneNumber, numAmount);
       setIsSubmitting(false);
     }, 400);
   };

@@ -1,8 +1,7 @@
 /**
  * Referral helpers: unique code generation, domain resolution, and link building.
  *
- * These operate on the existing User data model and localStorage layer — no new
- * persistence system is introduced.
+ * These operate on the existing User data model stored in Supabase.
  */
 import { User } from '../types';
 import { REFERRAL_CODE_PREFIX } from '../config/rewards';

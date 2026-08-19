@@ -123,8 +123,8 @@ export const UserDashboardPage: React.FC = () => {
       return;
     }
     setIsSubmittingStake(true);
-    setTimeout(() => {
-      investInProject(showcaseProject.id, numStake, inlinePeriodDays);
+    setTimeout(async () => {
+      await investInProject(showcaseProject.id, numStake, inlinePeriodDays);
       setIsSubmittingStake(false);
       setDashboardTab('investments');
     }, 400);

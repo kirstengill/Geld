@@ -78,10 +78,10 @@ export const RewardsCard: React.FC = () => {
 
   const totalRewardsClaimed = rewardHistory.reduce((acc, t) => acc + t.amount, 0);
 
-  const handleClaim = () => {
+  const handleClaim = async () => {
     if (!available || isClaiming) return;
     setIsClaiming(true);
-    const res = claimDailyReward();
+    const res = await claimDailyReward();
     if (!res.success) {
       showToast('warning', 'Cannot Claim Yet', res.error || 'Daily reward is not yet available.');
     }

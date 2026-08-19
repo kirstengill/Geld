@@ -22,8 +22,8 @@ export const SignInPage: React.FC = () => {
     }
 
     setIsLoading(true);
-    setTimeout(() => {
-      signIn(username, password);
+    setTimeout(async () => {
+      await signIn(username, password);
       setIsLoading(false);
     }, 300);
   };

@@ -40,6 +40,8 @@ export interface ClothingProject {
   raisedAmount: number;
   minStake: number;
   expectedReturnRate: number; // e.g. 18 for 18%
+  /** Total payout multiplier at maturity (e.g. 1.5 → UGX 20,000 returns UGX 30,000). */
+  returnMultiplier?: number;
   lockupPeriodDays: number; // e.g. 14, 30, 90, 180
   periodLabel: string; // e.g. "14 Days", "6 Months"
   status: 'active' | 'funded' | 'closed';
@@ -68,6 +70,7 @@ export interface UserInvestment {
   periodLabel: string;
   createdAtTimestamp?: number; // timestamp in milliseconds when investment was made
   daysCredited?: number; // count of daily 2% returns already paid to user balance
+  returnCredited?: boolean; // idempotency guard — maturity payout already applied
 }
 
 export interface TransactionRequest {

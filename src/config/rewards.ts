@@ -25,3 +25,6 @@ export const DAILY_REWARD_WINDOW_LABEL = 'Every 24 hours';
 
 // Session-storage key used to carry the referral code through the signup flow.
 export const REFERRAL_SIGNUP_STORAGE_KEY = 'threadinvest_referral_signup_code';
+
+// Minimum withdrawal amount in UGX.
+export const MIN_WITHDRAWAL_UGX = 15000;

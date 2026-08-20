@@ -508,7 +508,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
     const now = Date.now();
     const investmentId = `inv-${now}`;
-    const expectedReturnAmount = Math.round(amount * (project.expectedReturnRate / 100));
+    const expectedReturnAmount = Math.round(amount * (1 + project.expectedReturnRate / 100));
     const dailyRate = Number((project.expectedReturnRate / lockupDays).toFixed(1)) || 7.1;
     const newBalance = currentUser.balance - amount;
 

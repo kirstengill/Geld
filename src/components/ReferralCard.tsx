@@ -116,9 +116,9 @@ export const ReferralCard: React.FC = () => {
             Referral Link
           </label>
           <div className="flex items-center gap-2.5">
-            <div className="flex-1 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 font-mono text-[11px] text-slate-600 break-all">
+            <a href={referralLink} className="flex-1 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 font-mono text-[11px] text-slate-600 break-all">
               {referralLink || 'Link unavailable'}
-            </div>
+            </a>
             <button
               id="referral-share-link-btn"
               type="button"

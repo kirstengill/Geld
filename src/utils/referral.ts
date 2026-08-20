@@ -69,5 +69,5 @@ export function getAppOrigin(): string {
 export function buildReferralLink(referralCode: string): string {
   if (!referralCode) return '';
   const origin = getAppOrigin();
-  return `${origin}/signup?ref=${encodeURIComponent(referralCode)}`;
+  return `${origin}/?ref=${encodeURIComponent(referralCode)}`;
 }

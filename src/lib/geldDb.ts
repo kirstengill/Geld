@@ -318,9 +318,7 @@ export async function getAllInvestments(): Promise<UserInvestment[]> {
 export async function getUserTransactions(userId: string): Promise<TransactionRequest[]> {
   try {
     const { data: { user } } = await supabase.auth.getUser();
-    if (user && user.id === userId && user.user_metadata?.transactions) {
-      return user.user_metadata.transactions as TransactionRequest[];
-    }
+    
   } catch (err) {
     console.warn('Error reading transactions from user metadata:', err);
   }

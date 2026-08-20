@@ -111,7 +111,7 @@ export const Footer: React.FC = () => {
         <div className="border-t border-slate-800 pt-8 flex flex-col sm:flex-row items-center justify-between text-xs text-slate-500 gap-4">
           <div className="flex items-center gap-2">
             <span>© 2024 ThreadInvest, All rights reserved.</span>
-            <RedDotAdminTrigger />
+           
           </div>
           <div className="flex items-center gap-6">
             <span className="hover:text-slate-400 transition cursor-pointer">Privacy Policy</span>

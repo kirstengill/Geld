@@ -1,6 +1,7 @@
 import React from 'react';
 import { useApp } from '../context/AppContext';
 import { ShieldCheck, Heart, ArrowUpRight } from 'lucide-react';
+import { RedDotAdminTrigger } from './RedDotAdminTrigger';
 
 export const Footer: React.FC = () => {
   const { setCurrentView } = useApp();
@@ -108,21 +109,14 @@ export const Footer: React.FC = () => {
         </div>
 
         <div className="border-t border-slate-800 pt-8 flex flex-col sm:flex-row items-center justify-between text-xs text-slate-500 gap-4">
-          <div>
-            © 2024 ThreadInvest, All rights reserved.
+          <div className="flex items-center gap-2">
+            <span>© 2024 ThreadInvest, All rights reserved.</span>
+            <RedDotAdminTrigger />
           </div>
           <div className="flex items-center gap-6">
             <span className="hover:text-slate-400 transition cursor-pointer">Privacy Policy</span>
             <span className="hover:text-slate-400 transition cursor-pointer">Terms of Service</span>
             <span className="hover:text-slate-400 transition cursor-pointer">Security Audits</span>
-            {/* Tiny static red dot for admin section */}
-            <button
-              id="footer-admin-secret-dot"
-              onClick={() => setCurrentView('admin')}
-              aria-label="Admin"
-              title="System"
-              className="w-2 h-2 rounded-full bg-red-600/80 hover:bg-red-500 transition-colors opacity-40 hover:opacity-100 cursor-pointer focus:outline-none"
-            />
           </div>
         </div>
       </div>

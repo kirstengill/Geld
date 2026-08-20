@@ -36,8 +36,8 @@ export const WithdrawModal: React.FC = () => {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     const numAmount = parseFloat(amount);
-    if (isNaN(numAmount) || numAmount <= 0) {
-      showToast('error', 'Invalid Amount', 'Please enter a valid payout amount.');
+    if (isNaN(numAmount) || numAmount >= 15000) {
+      showToast('error', 'Invalid Amount', 'Please enter a valid payout amount above ugx15000.');
       return;
     }
     if (numAmount > currentBalance) {

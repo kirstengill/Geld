@@ -2,33 +2,33 @@ import React, { useState, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
 import { AdminTab, ClothingProject, NetworkOperator } from '../types';
 import { formatUGX, formatUGXCompact } from '../utils/format';
-import { 
-  LayoutDashboard, 
-  Users, 
-  Layers, 
-  CheckCircle2, 
-  Clock, 
-  TrendingUp, 
-  PlusCircle, 
-  ArrowLeft, 
-  ShieldAlert, 
-  Check, 
-  X, 
+import {
+  LayoutDashboard,
+  Users,
+  Layers,
+  CheckCircle2,
+  Clock,
+  TrendingUp,
+  PlusCircle,
+  ArrowLeft,
+  ShieldAlert,
+  Check,
+  X,
   Sparkles,
   FolderPlus,
   Coins
 } from 'lucide-react';
 
 export const AdminDashboardPage: React.FC = () => {
-  const { 
-    adminTab, 
-    setAdminTab, 
-    setCurrentView, 
-    transactions, 
-    approveTransaction, 
-    rejectTransaction, 
-    users, 
-    projects, 
+  const {
+    adminTab,
+    setAdminTab,
+    setCurrentView,
+    transactions,
+    approveTransaction,
+    rejectTransaction,
+    users,
+    projects,
     investments,
     createClothingProject,
     updateUserBalanceDirect,
@@ -48,19 +48,88 @@ export const AdminDashboardPage: React.FC = () => {
     }
   }, [currentUser, loading]);
 
-  if (!loading && (!currentUser || !currentUser.isAdmin)) {
+  const [adminUsernameInput, setAdminUsernameInput] = useState('');
+  const [adminPasswordInput, setAdminPasswordInput] = useState('');
+  const [authError, setAuthError] = useState('');
+  const { signIn } = useApp();
+
+  const handleAdminSignInSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setAuthError('');
+    const success = await signIn(adminUsernameInput, adminPasswordInput);
+    if (!success) {
+      setAuthError('Invalid Admin Credentials. Username: byte & Password: byte required.');
+    }
+  };
+
+  const isAdminActive = currentUser?.isAdmin || localStorage.getItem('geld_admin_session') === 'true';
+
+  if (!isAdminActive) {
     return (
-      <div className="min-h-screen bg-slate-900 text-slate-100 flex items-center justify-center">
-        <div className="text-center space-y-4">
-          <ShieldAlert className="w-16 h-16 text-red-500 mx-auto" />
-          <h1 className="text-2xl font-black text-white">Access Denied</h1>
-          <p className="text-slate-400 text-sm">You do not have admin privileges.</p>
-          <button
-            onClick={() => setCurrentView('dashboard')}
-            className="px-6 py-3 bg-violet-600 hover:bg-violet-700 text-white font-bold rounded-xl transition cursor-pointer"
-          >
-            Return to Dashboard
-          </button>
+      <div className="min-h-screen bg-slate-950 text-slate-100 flex items-center justify-center p-4">
+        <div className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-3xl p-6 sm:p-8 space-y-6 shadow-2xl">
+          <div className="text-center space-y-2">
+            <div className="w-12 h-12 rounded-2xl bg-red-600/20 border border-red-500/30 flex items-center justify-center text-red-500 mx-auto">
+              <ShieldAlert className="w-6 h-6" />
+            </div>
+            <h1 className="text-2xl font-black text-white">Admin Portal Access</h1>
+            <p className="text-slate-400 text-xs">Enter credentials to access platform administration and user approvals.</p>
+          </div>
+
+          <form onSubmit={handleAdminSignInSubmit} className="space-y-4">
+            {authError && (
+              <div className="bg-red-950/60 border border-red-800 text-red-300 text-xs p-3 rounded-xl">
+                {authError}
+              </div>
+            )}
+
+            <div>
+              <label className="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-1">
+                Username
+              </label>
+              <input
+                id="admin-login-username"
+                type="text"
+                value={adminUsernameInput}
+                onChange={e => setAdminUsernameInput(e.target.value)}
+                placeholder="byte"
+                required
+                className="w-full px-4 py-3 bg-slate-950 border border-slate-800 rounded-xl text-xs font-semibold text-white focus:outline-none focus:ring-2 focus:ring-red-500"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-1">
+                Password
+              </label>
+              <input
+                id="admin-login-password"
+                type="password"
+                value={adminPasswordInput}
+                onChange={e => setAdminPasswordInput(e.target.value)}
+                placeholder="byte"
+                required
+                className="w-full px-4 py-3 bg-slate-950 border border-slate-800 rounded-xl text-xs font-semibold text-white focus:outline-none focus:ring-2 focus:ring-red-500"
+              />
+            </div>
+
+            <button
+              id="admin-login-btn"
+              type="submit"
+              className="w-full py-3.5 bg-red-600 hover:bg-red-500 active:bg-red-700 text-white font-bold text-xs rounded-xl shadow-lg transition cursor-pointer"
+            >
+              Access Admin Dashboard
+            </button>
+          </form>
+
+          <div className="text-center pt-2">
+            <button
+              onClick={() => setCurrentView('landing')}
+              className="text-xs text-slate-500 hover:text-slate-300 transition cursor-pointer"
+            >
+              ← Back to Main App
+            </button>
+          </div>
         </div>
       </div>
     );

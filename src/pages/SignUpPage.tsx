@@ -111,7 +111,7 @@ export const SignUpPage: React.FC = () => {
                 value={fullName}
                 onChange={e => setFullName(e.target.value)}
                 required
-                placeholder="e.g. Anthony Mugenyi"
+                placeholder="e.g. enter full name"
                 className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium focus:bg-white focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent transition"
               />
             </div>
@@ -132,7 +132,7 @@ export const SignUpPage: React.FC = () => {
                 value={username}
                 onChange={e => setUsername(e.target.value)}
                 required
-                placeholder="anthonymugenyi"
+                placeholder="your name"
                 className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium focus:bg-white focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent transition"
               />
             </div>

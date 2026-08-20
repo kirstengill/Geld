@@ -16,7 +16,6 @@ import { TopUpModal } from './components/TopUpModal';
 import { WithdrawModal } from './components/WithdrawModal';
 import { InvestModal } from './components/InvestModal';
 import { ToastContainer } from './components/ToastContainer';
-import { RedDotAdminTrigger } from './components/RedDotAdminTrigger';
 
 const MainRouter: React.FC = () => {
   const { currentView } = useApp();
@@ -25,9 +24,6 @@ const MainRouter: React.FC = () => {
     <div className="min-h-screen bg-slate-50 text-slate-900 flex flex-col font-sans selection:bg-violet-100 selection:text-violet-900">
       {/* Toast Notifications */}
       <ToastContainer />
-
-      {/* Hidden Admin Access Red Dot (Fixed in the bottom-right corner as required) */}
-      <RedDotAdminTrigger />
 
       {/* Global Modals */}
       <TopUpModal />

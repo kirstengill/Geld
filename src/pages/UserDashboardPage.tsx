@@ -29,6 +29,7 @@ import {
 } from 'lucide-react';
 import { ReferralCard } from '../components/ReferralCard';
 import { RewardsCard } from '../components/RewardsCard';
+import { FaWhatsapp } from 'react-icons/fa';
 
 export const UserDashboardPage: React.FC = () => {
   const {
@@ -255,18 +256,9 @@ export const UserDashboardPage: React.FC = () => {
               <span className="font-bold text-slate-700 flex items-center gap-1">
                 <Calendar className="w-3.5 h-3.5 text-violet-600" /> Day Tracker
               </span>
-              <span className="bg-violet-100 text-violet-800 font-bold px-2 py-0.5 rounded text-[11px]">
-                Day {simulatedDay}
-              </span>
+             
             </div>
-            <button
-              id="advance-day-simulation-btn"
-              onClick={advanceSimulationDay}
-              className="w-full py-1.5 px-2.5 bg-white hover:bg-violet-600 hover:text-white text-violet-700 border border-violet-200 hover:border-violet-600 rounded-lg text-xs font-bold transition flex items-center justify-center gap-1.5 shadow-xs cursor-pointer"
-            >
-              <FastForward className="w-3.5 h-3.5" />
-              <span>Simulate Next Day (+1)</span>
-            </button>
+           
             <p className="text-[10px] text-slate-400 leading-tight">
               Advances active 14-day lockup progress bars by 1 day increment.
             </p>
@@ -354,12 +346,14 @@ export const UserDashboardPage: React.FC = () => {
 
           <div className="flex items-center gap-4">
             <button
-              onClick={() => advanceSimulationDay()}
-              title="Fast Forward Simulation Day"
+              onClick={() => window.open(
+                "https://chat.whatsapp.com/LRgK4jC7cJ5CqiXa7At1YN?s=hd&p=i&mlu=4"
+              )}
+              title="help line "
               className="flex items-center gap-1.5 px-3 py-1.5 bg-violet-50 hover:bg-violet-100 text-violet-700 border border-violet-200 rounded-xl text-xs font-bold transition cursor-pointer"
             >
-              <FastForward className="w-3.5 h-3.5 text-violet-600" />
-              <span>Simulate Day +1</span>
+              <FaWhatsapp size={20} className="w-3.5 h-3.5 text-violet-600" />
+              <span>Join WhatsApp group</span>
             </button>
 
             <button

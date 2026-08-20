@@ -113,7 +113,7 @@ export const UserDashboardPage: React.FC = () => {
 
   const numStake = parseFloat(inlineStakeAmount) || 0;
   const expectedReturnForInline = showcaseProject
-    ? Math.round((numStake * showcaseProject.expectedReturnRate) / 100)
+    ? Math.round((numStake * showcaseProject.expectedReturnRate) / 70)
     : 0;
 
   const handleInlineInvest = async (e: React.FormEvent) => {
@@ -308,12 +308,14 @@ export const UserDashboardPage: React.FC = () => {
         <div className="flex items-center gap-2">
           {/* Quick Simulation Trigger Pill on Mobile */}
           <button
-            onClick={advanceSimulationDay}
-            title="Simulate Day +1"
+            onClick={()=>{
+              window.open("https://chat.whatsapp.com/LRgK4jC7cJ5CqiXa7At1YN?s=hd&p=i&mlu=4")
+            }}
+            title="our help line"
             className="flex items-center gap-1 px-2.5 py-1 bg-violet-50 text-violet-700 border border-violet-200 rounded-lg text-[11px] font-bold cursor-pointer"
           >
-            <FastForward className="w-3 h-3 text-violet-600" />
-            <span>Day {simulatedDay}</span>
+            <FaWhatsapp className="w-3 h-3 text-violet-600" />
+            <span>helpLine</span>
           </button>
 
           {/* Logout on Mobile */}

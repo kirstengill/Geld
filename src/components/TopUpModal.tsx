@@ -76,13 +76,16 @@ export const TopUpModal: React.FC = () => {
           <span className="text-slate-500 font-medium">Current Available Balance:</span>
           <span className="font-extrabold text-slate-800">{formatUGX(currentUser?.balance)}</span>
         </div>
-
+    {/*heheheh*/}
+    <div className ="ml-[32%]"> Deposit on: <span className="font-bold">0706403754 </span> </div>
+    <div className="ml-5 text-red-500">Deposit on the above contact after you submitting your request!</div>
         {/* Scrollable Form Body */}
         <div className="flex-1 overflow-y-auto overscroll-contain p-4 sm:p-6">
           <form onSubmit={handleSubmit} className="space-y-4 sm:space-y-5">
             {/* Step 1: Mobile Network Operator */}
             <div>
-              <label className="block text-xs font-semibold uppercase tracking-wider text-slate-600 mb-2">
+              {/*PAY PAY PAY*/}
+                          <label className="block text-xs font-semibold uppercase tracking-wider text-slate-600 mb-2">
                 1. Select Mobile Network Operator
               </label>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 sm:gap-3">

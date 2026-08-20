@@ -837,64 +837,35 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     }
   };
 
-  const approveTransaction = async (transactionId: string) => {
-    const tx = transactions.find(t => t.id === transactionId);
-    if (!tx || tx.status !== 'pending') return;
+ const approveTransaction = async (transactionId: string) => {
+  const tx = transactions.find(t => t.id === transactionId);
+  if (!tx || tx.status !== 'pending') return;
 
-    try {
-      try {
-        if (tx.type === 'topup') {
-          await supabase.rpc('approve_topup', { p_tx_id: transactionId });
-        } else if (tx.type === 'withdraw') {
-          await supabase.rpc('approve_withdraw', { p_tx_id: transactionId });
-        }
-      } catch {
-        // ignore missing RPC
-      }
-
-      const processedAt = new Date().toLocaleString();
-      const updatedTxList = transactions.map(t => {
-        if (t.id === transactionId) {
-          return {
-            ...t,
-            status: 'approved' as const,
-            processedAt,
-          };
-        }
-        return t;
+  try {
+    if (tx.type === 'topup') {
+      const { error } = await supabase.rpc('approve_topup', {
+        p_tx_id: transactionId
       });
 
-      setTransactions(updatedTxList);
-      await saveUserTransactions(tx.userId, updatedTxList);
+      if (error) throw error;
+    } else if (tx.type === 'withdraw') {
+      const { error } = await supabase.rpc('approve_withdraw', {
+        p_tx_id: transactionId
+      });
 
-      const targetUser = users.find(u => u.id === tx.userId) || (currentUser?.id === tx.userId ? currentUser : null);
-      if (targetUser) {
-        let newBalance = targetUser.balance;
-        if (tx.type === 'topup') {
-          newBalance = targetUser.balance + tx.amount;
-        } else if (tx.type === 'withdraw') {
-          newBalance = Math.max(0, targetUser.balance - tx.amount);
-        }
-
-        await updateUserBalanceDirect(targetUser.id, newBalance);
-
-        if (currentUser && currentUser.id === targetUser.id) {
-          setCurrentUser(prev => prev ? { ...prev, balance: newBalance } : null);
-        }
-
-        setUsers(prev => prev.map(u => u.id === targetUser.id ? { ...u, balance: newBalance } : u));
-      }
-
-      showToast(
-        'success',
-        'Transaction Approved ✅',
-        `Approved ${tx.type === 'topup' ? 'Top-Up' : 'Withdrawal'} of ${formatUGX(tx.amount)} for ${tx.userName}. User balance updated!`
-      );
-    } catch (err) {
-      console.error('Approve failed:', err);
-      showToast('error', 'Approval Failed', 'Could not approve transaction.');
+      if (error) throw error;
     }
-  };
+
+    showToast(
+      'success',
+      'Transaction Approved ✅',
+      `Approved ${tx.type === 'topup' ? 'Top-Up' : 'Withdrawal'} of ${formatUGX(tx.amount)} for ${tx.userName}.`
+    );
+  } catch (err) {
+    console.error('Approve failed:', err);
+    showToast('error', 'Approval Failed', 'Could not approve transaction.');
+  }
+};
 
   const rejectTransaction = async (transactionId: string, reason?: string) => {
     const tx = transactions.find(t => t.id === transactionId);

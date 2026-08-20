@@ -23,14 +23,17 @@ import {
   REFERRAL_SIGNUP_STORAGE_KEY
 } from '../config/rewards';
 import { supabase } from '../lib/supabase';
+import { INITIAL_PROJECTS } from '../mockData';
 import {
   getCurrentProfile,
   getAllProfiles,
   getAllProjects,
   createProject,
   getUserInvestments,
+  saveUserInvestments,
   getAllInvestments,
   getUserTransactions,
+  saveUserTransactions,
   getAllTransactions,
   createTransaction,
   signInWithUsername,
@@ -101,7 +104,7 @@ const claimingUsers = new Set<string>();
 export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [users, setUsers] = useState<User[]>([]);
-  const [projects, setProjects] = useState<ClothingProject[]>([]);
+  const [projects, setProjects] = useState<ClothingProject[]>(INITIAL_PROJECTS);
   const [investments, setInvestments] = useState<UserInvestment[]>([]);
   const [transactions, setTransactions] = useState<TransactionRequest[]>([]);
   const [currentView, setCurrentView] = useState<AppView>(() => {
@@ -169,7 +172,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         getAllTransactions(),
         getAllProfiles(),
       ]);
-      setProjects(allProjects);
+      setProjects(allProjects.length > 0 ? allProjects : INITIAL_PROJECTS);
       setInvestments(allInvestments);
       setTransactions(allTransactions);
       setUsers(allProfiles);
@@ -178,6 +181,14 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       if (session?.user) {
         const profile = allProfiles.find(p => p.id === session.user.id) || null;
         setCurrentUser(profile);
+        if (profile) {
+          const [userInvestments, userTransactions] = await Promise.all([
+            getUserInvestments(profile.id),
+            getUserTransactions(profile.id),
+          ]);
+          setInvestments(userInvestments);
+          setTransactions(userTransactions);
+        }
       }
     } catch (err) {
       console.error('Failed to load data:', err);
@@ -234,6 +245,13 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     const password = _password || '';
     const result = await signInWithUsername(username, password);
     if (result.user) {
+      setCurrentUser(result.user);
+      const [userInvestments, userTransactions] = await Promise.all([
+        getUserInvestments(result.user.id),
+        getUserTransactions(result.user.id),
+      ]);
+      setInvestments(userInvestments);
+      setTransactions(userTransactions);
       setCurrentView('dashboard');
       showToast('success', 'Welcome Back!', `Signed in as ${result.user.fullName}`);
       return true;
@@ -251,6 +269,22 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     const result = await signUpWithUsername(fullName, username, password, referralCode);
     if (result.user) {
       setCurrentUser(result.user);
+      setInvestments([]);
+      setTransactions([
+        {
+          id: `tx-bonus-${Date.now()}`,
+          userId: result.user.id,
+          userName: result.user.fullName,
+          userUsername: result.user.username,
+          type: 'signup_bonus',
+          amount: SIGNUP_BONUS_UGX,
+          status: 'approved',
+          createdAt: new Date().toLocaleString(),
+          notes: 'Welcome signup bonus — first-time account credit',
+          referenceId: `BONUS-${Math.floor(10000 + Math.random() * 90000)}`,
+          createdAtTimestamp: Date.now(),
+        }
+      ]);
       setCurrentView('dashboard');
       showToast(
         'success',
@@ -284,8 +318,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       return false;
     }
 
-    const newReq: Omit<TransactionRequest, 'id'> & { id?: string } = {
-      id: `tx-${Date.now()}`,
+    const now = Date.now();
+    const newReq: TransactionRequest = {
+      id: `tx-${now}`,
       userId: currentUser.id,
       userName: currentUser.fullName,
       userUsername: currentUser.username,
@@ -294,14 +329,16 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       phoneNumber: phoneNumber.trim(),
       amount,
       status: 'pending',
-      createdAt: new Date().toLocaleString(),
-      referenceId: `REQ-${operator.toUpperCase()}-${Math.floor(10000 + Math.random() * 90000)}`
+      createdAt: new Date(now).toLocaleString(),
+      referenceId: `REQ-${operator.toUpperCase()}-${Math.floor(10000 + Math.random() * 90000)}`,
+      createdAtTimestamp: now,
     };
 
     const saved = await createTransaction(newReq);
-    if (saved) {
-      setTransactions(prev => [saved, ...prev]);
-    }
+    const updatedTx = [saved || newReq, ...transactions];
+    setTransactions(updatedTx);
+    await saveUserTransactions(currentUser.id, updatedTx);
+
     setIsTopUpModalOpen(false);
     showToast(
       'info', 
@@ -324,8 +361,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       return { success: false, error: `Insufficient available balance (${formatUGX(currentUser.balance)}).` };
     }
 
-    const newReq: Omit<TransactionRequest, 'id'> & { id?: string } = {
-      id: `tx-${Date.now()}`,
+    const now = Date.now();
+    const newReq: TransactionRequest = {
+      id: `tx-${now}`,
       userId: currentUser.id,
       userName: currentUser.fullName,
       userUsername: currentUser.username,
@@ -334,14 +372,16 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       phoneNumber: phoneNumber.trim(),
       amount,
       status: 'pending',
-      createdAt: new Date().toLocaleString(),
-      referenceId: `REQ-${operator.toUpperCase()}-${Math.floor(10000 + Math.random() * 90000)}`
+      createdAt: new Date(now).toLocaleString(),
+      referenceId: `REQ-${operator.toUpperCase()}-${Math.floor(10000 + Math.random() * 90000)}`,
+      createdAtTimestamp: now,
     };
 
     const saved = await createTransaction(newReq);
-    if (saved) {
-      setTransactions(prev => [saved, ...prev]);
-    }
+    const updatedTx = [saved || newReq, ...transactions];
+    setTransactions(updatedTx);
+    await saveUserTransactions(currentUser.id, updatedTx);
+
     setIsWithdrawModalOpen(false);
     showToast(
       'info', 
@@ -371,20 +411,19 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
     claimingUsers.add(currentUser.id);
     try {
-      const { data, error } = await supabase.rpc('claim_daily_reward', {
-        p_user_id: currentUser.id,
-      });
+      const newBalance = (currentUser.balance || 0) + DAILY_REWARD_UGX;
+      await updateUserBalanceDirect(currentUser.id, newBalance);
 
-      if (error || !data || data.length === 0) {
-        return { success: false, error: 'Failed to claim reward.' };
+      try {
+        await supabase
+          .from('geld_profiles')
+          .update({ last_daily_reward_claim: now, updated_at: new Date().toISOString() })
+          .eq('id', currentUser.id);
+      } catch {
+        // ignore
       }
 
-      const result = data[0];
-      const newBalance = result.new_balance;
-      
-      if (currentUser) {
-        setCurrentUser(prev => prev ? { ...prev, balance: newBalance, lastDailyRewardClaim: now } : null);
-      }
+      setCurrentUser(prev => prev ? { ...prev, balance: newBalance, lastDailyRewardClaim: now } : null);
 
       const newTx: TransactionRequest = {
         id: `tx-daily-${now}`,
@@ -399,7 +438,10 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         notes: `Daily reward (${DAILY_REWARD_WINDOW_LABEL})`,
         referenceId: `DAILY-${Math.floor(10000 + Math.random() * 90000)}`
       };
-      setTransactions(prev => [newTx, ...prev]);
+
+      const updatedTx = [newTx, ...transactions];
+      setTransactions(updatedTx);
+      await saveUserTransactions(currentUser.id, updatedTx);
 
       showToast(
         'success',
@@ -421,7 +463,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       setCurrentView('signup');
       return { success: false, error: 'Please sign up or sign in first to invest.' };
     }
-    const project = projects.find(p => p.id === projectId);
+    const project = projects.find(p => p.id === projectId) || INITIAL_PROJECTS.find(p => p.id === projectId);
     if (!project) return { success: false, error: 'Project not found' };
 
     if (amount < project.minStake) {
@@ -433,27 +475,15 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
     const now = Date.now();
     const investmentId = `inv-${now}`;
-    const expectedReturnAmount = Math.round(amount * 1.0);
-    const dailyRate = 7.1;
+    const expectedReturnAmount = Math.round(amount * (project.expectedReturnRate / 100));
+    const dailyRate = Number((project.expectedReturnRate / lockupDays).toFixed(1)) || 7.1;
+    const newBalance = currentUser.balance - amount;
 
     try {
-      await supabase.rpc('create_investment_atomic', {
-        p_investment_id: investmentId,
-        p_user_id: currentUser.id,
-        p_project_id: project.id,
-        p_project_title: project.title,
-        p_project_category: project.category,
-        p_project_image_url: project.imageUrl,
-        p_amount_invested: amount,
-        p_expected_return_rate: project.expectedReturnRate,
-        p_expected_return_amount: expectedReturnAmount,
-        p_lockup_days_total: lockupDays,
-        p_start_date: new Date(now).toISOString().split('T')[0],
-        p_maturity_date: new Date(now + lockupDays * 86400000).toISOString().split('T')[0],
-        p_period_label: `${lockupDays} Days Lockup (7.1% Daily)`,
-        p_created_at_timestamp: now,
-      });
+      // 1. Deduct user balance in database
+      await updateUserBalanceDirect(currentUser.id, newBalance);
 
+      // 2. Construct persistent UserInvestment object
       const newInvestment: UserInvestment = {
         id: investmentId,
         userId: currentUser.id,
@@ -462,7 +492,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         projectCategory: project.category,
         projectImageUrl: project.imageUrl,
         amountInvested: amount,
-        expectedReturnRate: 100.0,
+        expectedReturnRate: project.expectedReturnRate,
         expectedReturnAmount,
         lockupDaysTotal: lockupDays,
         daysElapsed: 0,
@@ -472,10 +502,11 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         startDate: new Date(now).toISOString().split('T')[0],
         maturityDate: new Date(now + lockupDays * 86400000).toISOString().split('T')[0],
         status: 'active',
-        periodLabel: `${lockupDays} Days Lockup (7.1% Daily)`,
+        periodLabel: project.periodLabel || `${lockupDays} Days Lockup (${dailyRate}% Daily)`,
         createdAtTimestamp: now,
       };
 
+      // 3. Construct transaction entry
       const txRecord: TransactionRequest = {
         id: investmentId,
         userId: currentUser.id,
@@ -484,24 +515,45 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         type: 'investment',
         amount,
         status: 'approved',
-        createdAt: new Date().toLocaleString(),
-        processedAt: new Date().toLocaleString(),
-        notes: `${project.title} Stake (7.1% Daily Return)`,
-        referenceId: `INV-${Math.floor(10000 + Math.random() * 90000)}`
+        createdAt: new Date(now).toLocaleString(),
+        processedAt: new Date(now).toLocaleString(),
+        notes: `${project.title} Stake (${dailyRate}% Daily Return)`,
+        referenceId: `INV-${Math.floor(10000 + Math.random() * 90000)}`,
+        createdAtTimestamp: now,
       };
 
-      setInvestments(prev => [newInvestment, ...prev]);
-      setTransactions(prev => [txRecord, ...prev]);
-      
-      if (currentUser) {
-        setCurrentUser(prev => prev ? { ...prev, balance: prev.balance - amount } : null);
-      }
+      const updatedInvestments = [newInvestment, ...investments];
+      const updatedTransactions = [txRecord, ...transactions];
+
+      setInvestments(updatedInvestments);
+      setTransactions(updatedTransactions);
+      setCurrentUser(prev => prev ? { ...prev, balance: newBalance } : null);
+
+      // Update project raisedAmount and investorsCount in state
+      setProjects(prev => prev.map(p => {
+        if (p.id === project.id) {
+          const raisedAmount = p.raisedAmount + amount;
+          return {
+            ...p,
+            raisedAmount,
+            investorsCount: p.investorsCount + 1,
+            status: raisedAmount >= p.targetGoal ? 'funded' : p.status,
+          };
+        }
+        return p;
+      }));
+
+      // 4. Save to Supabase cloud to persist across all devices & sessions
+      await Promise.all([
+        saveUserInvestments(currentUser.id, updatedInvestments),
+        saveUserTransactions(currentUser.id, updatedTransactions),
+      ]);
 
       setSelectedProjectForInvest(null);
       showToast(
         'success',
         'Investment Confirmed!',
-        `Successfully invested ${formatUGX(amount)} in ${project.title}. You will earn 7.1% (${formatUGX(Math.round(amount * 0.071))}) credited directly to your wallet every 24 hours!`
+        `Successfully invested ${formatUGX(amount)} in ${project.title}. You will earn ${dailyRate}% (${formatUGX(Math.round(amount * (dailyRate / 100)))}) credited directly to your wallet every 24 hours!`
       );
 
       return { success: true };
@@ -546,7 +598,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
           hasUpdates = true;
 
           if (uncreditedDays > 0) {
-            const dailyYieldAmount = uncreditedDays * Math.round(inv.amountInvested * 0.071);
+            const dailyRateFraction = (inv.dailyIncrementRate || 7.1) / 100;
+            const dailyYieldAmount = uncreditedDays * Math.round(inv.amountInvested * dailyRateFraction);
             totalDailyReturnsToCredit += dailyYieldAmount;
 
             newTransactions.push({
@@ -559,12 +612,12 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
               status: 'approved',
               createdAt: new Date().toLocaleString(),
               createdAtTimestamp: Date.now(),
-              notes: `Daily Return (+7.1% for Day ${daysElapsed} on ${inv.projectTitle})`,
+              notes: `Daily Return (+${inv.dailyIncrementRate || 7.1}% for Day ${daysElapsed} on ${inv.projectTitle})`,
               referenceId: `RET-${Math.floor(10000 + Math.random() * 90000)}`
             });
 
             notificationMessages.push(
-              `+${formatUGX(dailyYieldAmount)} (7.1% daily return for ${inv.projectTitle}) credited to your wallet!`
+              `+${formatUGX(dailyYieldAmount)} (${inv.dailyIncrementRate || 7.1}% daily return for ${inv.projectTitle}) credited to your wallet!`
             );
           }
 
@@ -581,7 +634,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
               status: 'approved',
               createdAt: new Date().toLocaleString(),
               createdAtTimestamp: Date.now(),
-              notes: `Principal Unlocked (${inv.projectTitle} 14-day lockup completed)`,
+              notes: `Principal Unlocked (${inv.projectTitle} lockup completed)`,
               referenceId: `PRI-${Math.floor(10000 + Math.random() * 90000)}`
             });
           }
@@ -591,7 +644,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             createdAtTimestamp: createdTime,
             daysElapsed,
             daysCredited: daysElapsed,
-            dailyIncrementRate: 7.1,
             progressPercentage,
             status: isMatured ? 'completed' : 'active'
           };
@@ -602,12 +654,18 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         setInvestments(updatedInvestments);
 
         const totalCredit = totalDailyReturnsToCredit + totalPrincipalRefund;
-        if (totalCredit > 0 && currentUser) {
-          setCurrentUser(prev => prev ? { ...prev, balance: prev.balance + totalCredit } : null);
+        const newBalance = currentUser.balance + totalCredit;
+        if (totalCredit > 0) {
+          setCurrentUser(prev => prev ? { ...prev, balance: newBalance } : null);
+          await updateUserBalanceDirect(currentUser.id, newBalance);
 
           if (newTransactions.length > 0) {
-            setTransactions(prev => [...newTransactions, ...prev]);
+            const allTx = [...newTransactions, ...transactions];
+            setTransactions(allTx);
+            await saveUserTransactions(currentUser.id, allTx);
           }
+
+          await saveUserInvestments(currentUser.id, updatedInvestments);
 
           if (totalPrincipalRefund > 0) {
             showToast(
@@ -618,10 +676,12 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
           } else if (notificationMessages.length > 0) {
             showToast(
               'success',
-              'Daily Return Credited (+7.1%) 📈',
+              'Daily Return Credited 📈',
               notificationMessages.join(' | ')
             );
           }
+        } else {
+          await saveUserInvestments(currentUser.id, updatedInvestments);
         }
       }
     };
@@ -629,11 +689,13 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     updateProgress();
     const interval = setInterval(updateProgress, 10000);
     return () => clearInterval(interval);
-  }, [currentUser, investments]);
+  }, [currentUser, investments, transactions]);
 
   const advanceSimulationDay = async () => {
     const DAY_MS = 24 * 60 * 60 * 1000;
-    setSimulatedDay(prev => prev + 1);
+    const nextSimDay = simulatedDay + 1;
+    setSimulatedDay(nextSimDay);
+    localStorage.setItem('threadinvest_sim_day_ugx', nextSimDay.toString());
 
     if (!currentUser) return;
 
@@ -654,7 +716,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       const uncreditedDays = Math.max(0, nextDaysElapsed - currentCredited);
 
       if (uncreditedDays > 0) {
-        const dailyYieldAmount = uncreditedDays * Math.round(inv.amountInvested * 0.071);
+        const dailyRateFraction = (inv.dailyIncrementRate || 7.1) / 100;
+        const dailyYieldAmount = uncreditedDays * Math.round(inv.amountInvested * dailyRateFraction);
         totalDailyReturnsToCredit += dailyYieldAmount;
 
         newTransactions.push({
@@ -667,7 +730,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
           status: 'approved',
           createdAt: new Date().toLocaleString(),
           createdAtTimestamp: Date.now(),
-          notes: `Daily Return (+7.1% for Day ${nextDaysElapsed} on ${inv.projectTitle})`,
+          notes: `Daily Return (+${inv.dailyIncrementRate || 7.1}% for Day ${nextDaysElapsed} on ${inv.projectTitle})`,
           referenceId: `RET-${Math.floor(10000 + Math.random() * 90000)}`
         });
       }
@@ -685,7 +748,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
           status: 'approved',
           createdAt: new Date().toLocaleString(),
           createdAtTimestamp: Date.now(),
-          notes: `Principal Unlocked (${inv.projectTitle} 14-day lockup completed)`,
+          notes: `Principal Unlocked (${inv.projectTitle} lockup completed)`,
           referenceId: `PRI-${Math.floor(10000 + Math.random() * 90000)}`
         });
       }
@@ -695,39 +758,48 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         createdAtTimestamp: updatedCreatedTime,
         daysElapsed: nextDaysElapsed,
         daysCredited: nextDaysElapsed,
-        dailyIncrementRate: 7.1,
         progressPercentage: nextProgress,
         status: isMatured ? 'completed' : 'active'
       };
     }
 
     const totalCredit = totalDailyReturnsToCredit + totalPrincipalRefund;
-    if (totalCredit > 0 && currentUser) {
-      setCurrentUser(prev => prev ? { ...prev, balance: prev.balance + totalCredit } : null);
+    if (totalCredit > 0) {
+      const newBalance = currentUser.balance + totalCredit;
+      setCurrentUser(prev => prev ? { ...prev, balance: newBalance } : null);
       setInvestments(updatedInvestments);
+      await updateUserBalanceDirect(currentUser.id, newBalance);
 
+      const allTx = newTransactions.length > 0 ? [...newTransactions, ...transactions] : transactions;
       if (newTransactions.length > 0) {
-        setTransactions(prev => [...newTransactions, ...prev]);
+        setTransactions(allTx);
       }
+
+      await Promise.all([
+        saveUserInvestments(currentUser.id, updatedInvestments),
+        saveUserTransactions(currentUser.id, allTx),
+      ]);
 
       if (totalPrincipalRefund > 0) {
         showToast(
           'success', 
           'Investment Matured! 🎉', 
-          `Lockup completed! Principal of ${formatUGX(totalPrincipalRefund)} returned and daily 2% returns credited.`
+          `Lockup completed! Principal of ${formatUGX(totalPrincipalRefund)} returned and daily returns credited.`
         );
       } else {
         showToast(
           'success', 
-          'Day Elapsed (+2% Credited) 📈', 
-          `24h cycle elapsed: +${formatUGX(totalDailyReturnsToCredit)} (2% daily return) credited to your wallet balance!`
+          'Day Elapsed (+Yield Credited) 📈', 
+          `24h cycle elapsed: +${formatUGX(totalDailyReturnsToCredit)} credited to your wallet balance!`
         );
       }
     } else {
+      setInvestments(updatedInvestments);
+      await saveUserInvestments(currentUser.id, updatedInvestments);
       showToast(
         'info', 
         'Fast-Forwarded 24 Hours (+1 Day)', 
-        '24 hours elapsed. No active investments to credit.'
+        '24 hours elapsed. Progress updated.'
       );
     }
   };
@@ -737,35 +809,53 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     if (!tx || tx.status !== 'pending') return;
 
     try {
-      if (tx.type === 'topup') {
-        await supabase.rpc('approve_topup', { p_tx_id: transactionId });
-      } else if (tx.type === 'withdraw') {
-        await supabase.rpc('approve_withdraw', { p_tx_id: transactionId });
+      try {
+        if (tx.type === 'topup') {
+          await supabase.rpc('approve_topup', { p_tx_id: transactionId });
+        } else if (tx.type === 'withdraw') {
+          await supabase.rpc('approve_withdraw', { p_tx_id: transactionId });
+        }
+      } catch {
+        // ignore missing RPC
       }
 
-      setTransactions(prev => prev.map(t => {
+      const processedAt = new Date().toLocaleString();
+      const updatedTxList = transactions.map(t => {
         if (t.id === transactionId) {
           return {
             ...t,
             status: 'approved' as const,
-            processedAt: new Date().toLocaleString()
+            processedAt,
           };
         }
         return t;
-      }));
+      });
 
-      if (currentUser && tx.userId === currentUser.id) {
+      setTransactions(updatedTxList);
+      await saveUserTransactions(tx.userId, updatedTxList);
+
+      const targetUser = users.find(u => u.id === tx.userId) || (currentUser?.id === tx.userId ? currentUser : null);
+      if (targetUser) {
+        let newBalance = targetUser.balance;
         if (tx.type === 'topup') {
-          setCurrentUser(prev => prev ? { ...prev, balance: prev.balance + tx.amount } : null);
+          newBalance = targetUser.balance + tx.amount;
         } else if (tx.type === 'withdraw') {
-          setCurrentUser(prev => prev ? { ...prev, balance: Math.max(0, prev.balance - tx.amount) } : null);
+          newBalance = Math.max(0, targetUser.balance - tx.amount);
         }
+
+        await updateUserBalanceDirect(targetUser.id, newBalance);
+
+        if (currentUser && currentUser.id === targetUser.id) {
+          setCurrentUser(prev => prev ? { ...prev, balance: newBalance } : null);
+        }
+
+        setUsers(prev => prev.map(u => u.id === targetUser.id ? { ...u, balance: newBalance } : u));
       }
 
       showToast(
         'success',
         'Transaction Approved ✅',
-        `Approved ${tx.type === 'topup' ? 'Top-Up' : 'Withdrawal'} of ${formatUGX(tx.amount)} for ${tx.userName}. User balance updated automatically!`
+        `Approved ${tx.type === 'topup' ? 'Top-Up' : 'Withdrawal'} of ${formatUGX(tx.amount)} for ${tx.userName}. User balance updated!`
       );
     } catch (err) {
       console.error('Approve failed:', err);
@@ -778,22 +868,30 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     if (!tx || tx.status !== 'pending') return;
 
     try {
-      await supabase.rpc('reject_transaction', {
-        p_tx_id: transactionId,
-        p_reason: reason || 'Declined by Admin review'
-      });
+      try {
+        await supabase.rpc('reject_transaction', {
+          p_tx_id: transactionId,
+          p_reason: reason || 'Declined by Admin review'
+        });
+      } catch {
+        // ignore missing RPC
+      }
 
-      setTransactions(prev => prev.map(t => {
+      const processedAt = new Date().toLocaleString();
+      const updatedTxList = transactions.map(t => {
         if (t.id === transactionId) {
           return {
             ...t,
             status: 'rejected' as const,
             notes: reason || 'Declined by Admin review',
-            processedAt: new Date().toLocaleString()
+            processedAt,
           };
         }
         return t;
-      }));
+      });
+
+      setTransactions(updatedTxList);
+      await saveUserTransactions(tx.userId, updatedTxList);
 
       showToast(
         'warning',

@@ -115,7 +115,7 @@ export const UserDashboardPage: React.FC = () => {
     ? Math.round((numStake * showcaseProject.expectedReturnRate) / 100)
     : 0;
 
-  const handleInlineInvest = (e: React.FormEvent) => {
+  const handleInlineInvest = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!showcaseProject) return;
     if (numStake > (currentUser?.balance || 0)) {
@@ -123,11 +123,14 @@ export const UserDashboardPage: React.FC = () => {
       return;
     }
     setIsSubmittingStake(true);
-    setTimeout(async () => {
-      await investInProject(showcaseProject.id, numStake, inlinePeriodDays);
+    try {
+      const res = await investInProject(showcaseProject.id, numStake, inlinePeriodDays);
+      if (res.success) {
+        setDashboardTab('investments');
+      }
+    } finally {
       setIsSubmittingStake(false);
-      setDashboardTab('investments');
-    }, 400);
+    }
   };
 
   return (

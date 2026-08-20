@@ -23,22 +23,23 @@ export const InvestModal: React.FC = () => {
 
   const quickAmounts = [20000, 50000, 100000, 250000, 500000];
 
-  const handleInvest = (e: React.FormEvent) => {
+  const handleInvest = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!hasSufficientBalance) return;
 
     setIsProcessing(true);
-    setTimeout(async () => {
+    try {
       const res = await investInProject(project.id, numAmount, selectedPeriod);
-      setIsProcessing(false);
       if (res.success) {
         setJustInvested(true);
         setTimeout(() => {
           setJustInvested(false);
           setSelectedProjectForInvest(null);
-        }, 1200);
+        }, 800);
       }
-    }, 400);
+    } finally {
+      setIsProcessing(false);
+    }
   };
 
   return (

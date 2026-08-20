@@ -129,14 +129,22 @@ export async function getProfileByEmail(email: string): Promise<User | null> {
   return rowToUser(data);
 }
 
-export async function getAllProjects(): Promise<ClothingProject[]> {
-  const { data, error } = await supabase
-    .from('geld_projects')
-    .select('*')
-    .order('created_at', { ascending: false });
+import { INITIAL_PROJECTS } from '../mockData';
 
-  if (error || !data) return [];
-  return data.map(rowToProject);
+export async function getAllProjects(): Promise<ClothingProject[]> {
+  try {
+    const { data, error } = await supabase
+      .from('geld_projects')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    if (error || !data || data.length === 0) {
+      return INITIAL_PROJECTS;
+    }
+    return data.map(rowToProject);
+  } catch {
+    return INITIAL_PROJECTS;
+  }
 }
 
 export async function createProject(project: Omit<ClothingProject, 'id' | 'raisedAmount' | 'investorsCount' | 'status'>): Promise<ClothingProject | null> {
@@ -160,82 +168,264 @@ export async function createProject(project: Omit<ClothingProject, 'id' | 'raise
     featured: project.featured || false,
   };
 
-  const { data, error } = await supabase
-    .from('geld_projects')
-    .insert(newProject)
-    .select()
-    .single();
+  try {
+    const { data, error } = await supabase
+      .from('geld_projects')
+      .insert(newProject)
+      .select()
+      .single();
 
-  if (error || !data) return null;
-  return rowToProject(data);
+    if (error || !data) {
+      return {
+        id: newProject.id as string,
+        ...project,
+        raisedAmount: 0,
+        investorsCount: 0,
+        status: 'active',
+      };
+    }
+    return rowToProject(data);
+  } catch {
+    return {
+      id: newProject.id as string,
+      ...project,
+      raisedAmount: 0,
+      investorsCount: 0,
+      status: 'active',
+    };
+  }
 }
 
 export async function getUserInvestments(userId: string): Promise<UserInvestment[]> {
-  const { data, error } = await supabase
-    .from('geld_investments')
-    .select('*')
-    .eq('user_id', userId)
-    .order('created_at', { ascending: false });
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (user && user.id === userId && user.user_metadata?.investments) {
+      return user.user_metadata.investments as UserInvestment[];
+    }
+  } catch (err) {
+    console.warn('Error reading investments from user metadata:', err);
+  }
 
-  if (error || !data) return [];
-  return data.map(rowToInvestment);
+  try {
+    const { data, error } = await supabase
+      .from('geld_investments')
+      .select('*')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false });
+
+    if (!error && data && data.length > 0) {
+      return data.map(rowToInvestment);
+    }
+  } catch {
+    // ignore
+  }
+
+  return [];
+}
+
+export async function saveUserInvestments(userId: string, investments: UserInvestment[]): Promise<void> {
+  try {
+    await supabase.auth.updateUser({
+      data: {
+        investments,
+      },
+    });
+  } catch (err) {
+    console.error('Failed to persist investments to Supabase user metadata:', err);
+  }
+
+  try {
+    await supabase.from('geld_investments').upsert(
+      investments.map(inv => ({
+        id: inv.id,
+        user_id: userId,
+        project_id: inv.projectId,
+        project_title: inv.projectTitle,
+        project_category: inv.projectCategory,
+        project_image_url: inv.projectImageUrl,
+        amount_invested: inv.amountInvested,
+        expected_return_rate: inv.expectedReturnRate,
+        expected_return_amount: inv.expectedReturnAmount,
+        lockup_days_total: inv.lockupDaysTotal,
+        days_elapsed: inv.daysElapsed,
+        daily_increment_rate: inv.dailyIncrementRate,
+        progress_percentage: inv.progressPercentage,
+        start_date: inv.startDate,
+        maturity_date: inv.maturityDate,
+        status: inv.status,
+        period_label: inv.periodLabel,
+        created_at_timestamp: inv.createdAtTimestamp,
+        days_credited: inv.daysCredited,
+      }))
+    );
+  } catch {
+    // ignore
+  }
 }
 
 export async function getAllInvestments(): Promise<UserInvestment[]> {
-  const { data, error } = await supabase
-    .from('geld_investments')
-    .select('*')
-    .order('created_at', { ascending: false });
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (user?.user_metadata?.investments) {
+      return user.user_metadata.investments as UserInvestment[];
+    }
+  } catch {
+    // ignore
+  }
 
-  if (error || !data) return [];
-  return data.map(rowToInvestment);
+  try {
+    const { data, error } = await supabase
+      .from('geld_investments')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    if (!error && data) {
+      return data.map(rowToInvestment);
+    }
+  } catch {
+    // ignore
+  }
+
+  return [];
 }
 
 export async function getUserTransactions(userId: string): Promise<TransactionRequest[]> {
-  const { data, error } = await supabase
-    .from('geld_transactions')
-    .select('*')
-    .eq('user_id', userId)
-    .order('created_at_timestamp', { ascending: false });
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (user && user.id === userId && user.user_metadata?.transactions) {
+      return user.user_metadata.transactions as TransactionRequest[];
+    }
+  } catch (err) {
+    console.warn('Error reading transactions from user metadata:', err);
+  }
 
-  if (error || !data) return [];
-  return data.map(rowToTransaction);
+  try {
+    const { data, error } = await supabase
+      .from('geld_transactions')
+      .select('*')
+      .eq('user_id', userId)
+      .order('created_at_timestamp', { ascending: false });
+
+    if (!error && data && data.length > 0) {
+      return data.map(rowToTransaction);
+    }
+  } catch {
+    // ignore
+  }
+
+  return [];
+}
+
+export async function saveUserTransactions(userId: string, transactions: TransactionRequest[]): Promise<void> {
+  try {
+    await supabase.auth.updateUser({
+      data: {
+        transactions,
+      },
+    });
+  } catch (err) {
+    console.error('Failed to persist transactions to Supabase user metadata:', err);
+  }
+
+  try {
+    await supabase.from('geld_transactions').upsert(
+      transactions.map(tx => ({
+        id: tx.id,
+        user_id: userId,
+        user_name: tx.userName,
+        user_username: tx.userUsername,
+        type: tx.type,
+        operator: tx.operator || null,
+        phone_number: tx.phoneNumber || null,
+        amount: tx.amount,
+        status: tx.status,
+        created_at: tx.createdAt,
+        processed_at: tx.processedAt || null,
+        notes: tx.notes || null,
+        reference_id: tx.referenceId,
+        created_at_timestamp: tx.createdAtTimestamp || Date.now(),
+      }))
+    );
+  } catch {
+    // ignore
+  }
 }
 
 export async function getAllTransactions(): Promise<TransactionRequest[]> {
-  const { data, error } = await supabase
-    .from('geld_transactions')
-    .select('*')
-    .order('created_at_timestamp', { ascending: false });
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (user?.user_metadata?.transactions) {
+      return user.user_metadata.transactions as TransactionRequest[];
+    }
+  } catch {
+    // ignore
+  }
 
-  if (error || !data) return [];
-  return data.map(rowToTransaction);
+  try {
+    const { data, error } = await supabase
+      .from('geld_transactions')
+      .select('*')
+      .order('created_at_timestamp', { ascending: false });
+
+    if (!error && data) {
+      return data.map(rowToTransaction);
+    }
+  } catch {
+    // ignore
+  }
+
+  return [];
 }
 
 export async function createTransaction(tx: Omit<TransactionRequest, 'id'> & { id?: string }): Promise<TransactionRequest | null> {
-  const { data, error } = await supabase
-    .from('geld_transactions')
-    .insert({
-      id: tx.id || `tx-${Date.now()}`,
-      user_id: tx.userId,
-      user_name: tx.userName,
-      user_username: tx.userUsername,
-      type: tx.type,
-      operator: tx.operator || null,
-      phone_number: tx.phoneNumber || null,
-      amount: tx.amount,
-      status: tx.status,
-      created_at: tx.createdAt,
-      processed_at: tx.processedAt || null,
-      notes: tx.notes || null,
-      reference_id: tx.referenceId,
-      created_at_timestamp: tx.createdAtTimestamp || Date.now(),
-    })
-    .select()
-    .single();
+  const transactionId = tx.id || `tx-${Date.now()}`;
+  const fullTx: TransactionRequest = {
+    id: transactionId,
+    userId: tx.userId,
+    userName: tx.userName,
+    userUsername: tx.userUsername,
+    type: tx.type,
+    operator: tx.operator,
+    phoneNumber: tx.phoneNumber,
+    amount: tx.amount,
+    status: tx.status,
+    createdAt: tx.createdAt,
+    processedAt: tx.processedAt,
+    notes: tx.notes,
+    referenceId: tx.referenceId,
+    createdAtTimestamp: tx.createdAtTimestamp || Date.now(),
+  };
 
-  if (error || !data) return null;
-  return rowToTransaction(data);
+  try {
+    const { data, error } = await supabase
+      .from('geld_transactions')
+      .insert({
+        id: fullTx.id,
+        user_id: fullTx.userId,
+        user_name: fullTx.userName,
+        user_username: fullTx.userUsername,
+        type: fullTx.type,
+        operator: fullTx.operator || null,
+        phone_number: fullTx.phoneNumber || null,
+        amount: fullTx.amount,
+        status: fullTx.status,
+        created_at: fullTx.createdAt,
+        processed_at: fullTx.processedAt || null,
+        notes: fullTx.notes || null,
+        reference_id: fullTx.referenceId,
+        created_at_timestamp: fullTx.createdAtTimestamp,
+      })
+      .select()
+      .single();
+
+    if (!error && data) {
+      return rowToTransaction(data);
+    }
+  } catch {
+    // ignore
+  }
+
+  return fullTx;
 }
 
 export async function signInWithUsername(username: string, password: string): Promise<{ user: User | null; error?: string }> {

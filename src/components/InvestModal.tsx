@@ -185,7 +185,7 @@ export const InvestModal: React.FC = () => {
               </div>
               <div className="flex items-center justify-between text-xs text-slate-600">
                 <span>Daily Return (12.5% / 24h):</span>
-                <span className="font-bold text-emerald-600">+{formatUGX(Math.round(numAmount *0.125))} / day</span>
+                <span className="font-bold text-emerald-600">+{formatUGX(Math.round(numAmount * 0.125))} / day</span>
               </div>
               <div className="flex items-center justify-between text-xs text-slate-600">
                 <span>Lockup Period:</span>

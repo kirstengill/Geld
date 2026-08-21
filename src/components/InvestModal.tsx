@@ -18,7 +18,7 @@ export const InvestModal: React.FC = () => {
   const currentBalance = currentUser?.balance || 0;
   const hasSufficientBalance = currentBalance >= numAmount && numAmount >= project.minStake;
 
-  const expectedReturn = Math.round((numAmount * project.expectedReturnRate) / 100);
+  const expectedReturn = Math.round((numAmount * 0.125 * selectedPeriod) );
   const totalPayout = numAmount + expectedReturn;
 
   const quickAmounts = [20000, 50000, 100000, 250000, 500000];

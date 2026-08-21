@@ -508,8 +508,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
     const now = Date.now();
     const investmentId = `inv-${now}`;
-    const expectedReturnAmount = Math.round(amount * (1 + project.expectedReturnRate / 100));
-    const dailyRate = Number((project.expectedReturnRate / lockupDays).toFixed(1)) || 7.1;
+    const dailyRate =  12.5;
+    const expectedReturnAmount = Math.round(amount * (1 + (dailyRate / 100) * lockupDays));
+
     const newBalance = currentUser.balance - amount;
 
     try {
@@ -631,7 +632,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
           hasUpdates = true;
 
           if (uncreditedDays > 0) {
-            const dailyRateFraction = (inv.dailyIncrementRate || 7.1) / 100;
+            const dailyRateFraction = (inv.dailyIncrementRate || 12.5) / 100;
             const dailyYieldAmount = uncreditedDays * Math.round(inv.amountInvested * dailyRateFraction);
             totalDailyReturnsToCredit += dailyYieldAmount;
 

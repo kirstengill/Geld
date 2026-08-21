@@ -153,7 +153,7 @@ export const InvestModal: React.FC = () => {
               </label>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 sm:gap-2.5">
                 {[
-                  { days: 14, label: '14 Days Lockup', rateBonus: '7.1% Daily Return' },
+                  { days: 14, label: '14 Days Lockup', rateBonus: '12.5% Daily Return' },
                   { days: 30, label: '1 Month', rateBonus: 'Standard' },
                   { days: 90, label: '3 Months', rateBonus: 'Quarterly' }
                 ].map(item => (

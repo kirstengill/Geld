@@ -36,8 +36,8 @@ export const WithdrawModal: React.FC = () => {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     const numAmount = parseFloat(amount);
-    if (isNaN(numAmount) || numAmount < 15000) {
-      showToast('error', 'Invalid Amount', 'Minimum withdrawal amount is UGX 15,000.');
+    if (isNaN(numAmount) || numAmount < 8000) {
+      showToast('error', 'Invalid Amount', 'Minimum withdrawal amount is UGX 8,000.');
       return;
     }
     if (numAmount > currentBalance) {
@@ -185,9 +185,9 @@ export const WithdrawModal: React.FC = () => {
                 <input
                   id="withdraw-amount-input"
                   type="number"
-                  min="15000"
+                  min="8000"
                   step="1000"
-                  max={currentBalance}
+                  max={currentBalance }
                   value={amount}
                   onChange={e => setAmount(e.target.value)}
                   required

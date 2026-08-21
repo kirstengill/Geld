@@ -730,7 +730,7 @@ export const UserDashboardPage: React.FC = () => {
                   </button>
                 </div>
 
-                {userInvestments.length === 0 ? (
+                {userInvestments.length === 0 || userInvestments <= 6 ? (
                   <div className="text-center py-8 text-slate-400 text-xs">
                     No investments made yet. Choose a clothing project above to start!
                   </div>

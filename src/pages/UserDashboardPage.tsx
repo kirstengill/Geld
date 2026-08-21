@@ -679,9 +679,9 @@ export const UserDashboardPage: React.FC = () => {
                         {/* Expected Return Calculation */}
                         <div className="space-y-1.5 p-3 bg-white rounded-xl border border-slate-200 text-xs">
                           <div className="flex items-center justify-between">
-                            <span className="font-semibold text-slate-600">Daily Return (7.1% / 24h):</span>
+                            <span className="font-semibold text-slate-600">Daily Return (12.5% / 24h):</span>
                             <span className="font-extrabold text-emerald-600">
-                              +{formatUGX(Math.round(numStake * 0.071))} / day
+                              +{formatUGX(Math.round(numStake * 0.125))} / day
                             </span>
                           </div>
                           <div className="flex items-center justify-between pt-1 border-t border-slate-100">

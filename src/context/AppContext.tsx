@@ -646,12 +646,12 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
               status: 'approved',
               createdAt: new Date().toLocaleString(),
               createdAtTimestamp: Date.now(),
-              notes: `Daily Return (+${inv.dailyIncrementRate || 7.1}% for Day ${daysElapsed} on ${inv.projectTitle})`,
+              notes: `Daily Return (+${inv.dailyIncrementRate || 12.5}% for Day ${daysElapsed} on ${inv.projectTitle})`,
               referenceId: `RET-${Math.floor(10000 + Math.random() * 90000)}`
             });
 
             notificationMessages.push(
-              `+${formatUGX(dailyYieldAmount)} (${inv.dailyIncrementRate || 7.1}% daily return for ${inv.projectTitle}) credited to your wallet!`
+              `+${formatUGX(dailyYieldAmount)} (${inv.dailyIncrementRate || 12.5}% daily return for ${inv.projectTitle}) credited to your wallet!`
             );
           }
 
@@ -750,7 +750,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       const uncreditedDays = Math.max(0, nextDaysElapsed - currentCredited);
 
       if (uncreditedDays > 0) {
-        const dailyRateFraction = (inv.dailyIncrementRate || 7.1) / 100;
+        const dailyRateFraction = (inv.dailyIncrementRate || 12.5) / 100;
         const dailyYieldAmount = uncreditedDays * Math.round(inv.amountInvested * dailyRateFraction);
         totalDailyReturnsToCredit += dailyYieldAmount;
 
@@ -764,7 +764,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
           status: 'approved',
           createdAt: new Date().toLocaleString(),
           createdAtTimestamp: Date.now(),
-          notes: `Daily Return (+${inv.dailyIncrementRate || 7.1}% for Day ${nextDaysElapsed} on ${inv.projectTitle})`,
+          notes: `Daily Return (+${inv.dailyIncrementRate || 12.5}% for Day ${nextDaysElapsed} on ${inv.projectTitle})`,
           referenceId: `RET-${Math.floor(10000 + Math.random() * 90000)}`
         });
       }

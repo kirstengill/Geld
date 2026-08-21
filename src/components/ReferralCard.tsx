@@ -146,7 +146,7 @@ export const ReferralCard: React.FC = () => {
             </div>
           </div>
           <div className="bg-slate-50 rounded-xl p-3 border border-slate-100 text-center">
-            <div className="text-2xl font-black text-emerald-600">{formatUGX(referralRewardAmount)}</div>
+            <div className="text-2xl font-black text-emerald-600">20%</div>
             <div className="text-[10px] text-slate-500 font-semibold flex items-center justify-center gap-1 mt-0.5">
               <Tag className="w-3 h-3 text-amber-500" />
               <span>Per Referral</span>

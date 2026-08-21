@@ -587,30 +587,7 @@ export async function signUpWithUsername(
     }
   }
 
-  if (referrer) {
-    try {
-      await supabase
-        .from('geld_profiles')
-        .update({ balance: referrer.balance + 1000, updated_at: new Date().toISOString() })
-        .eq('id', referrer.id);
-
-      await supabase.from('geld_transactions').insert({
-        id: `tx-ref-${Date.now()}-${cleanUsername}`,
-        user_id: referrer.id,
-        user_name: referrer.fullName,
-        user_username: referrer.username,
-        type: 'referral_reward',
-        amount: 1000,
-        status: 'approved',
-        created_at: new Date().toLocaleString(),
-        notes: `Referral reward for ${fullName.trim()} (@${cleanUsername})`,
-        reference_id: `REF-${Math.floor(10000 + Math.random() * 90000)}`,
-        created_at_timestamp: Date.now(),
-      });
-    } catch {
-      // ignore referral reward errors
-    }
-  }
+  
 
   try {
     await supabase.from('geld_transactions').insert({

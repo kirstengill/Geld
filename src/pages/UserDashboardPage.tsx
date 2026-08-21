@@ -256,9 +256,9 @@ export const UserDashboardPage: React.FC = () => {
               <span className="font-bold text-slate-700 flex items-center gap-1">
                 <Calendar className="w-3.5 h-3.5 text-violet-600" /> Day Tracker
               </span>
-             
+
             </div>
-           
+
             <p className="text-[10px] text-slate-400 leading-tight">
               Advances active 14-day lockup progress bars by 1 day increment.
             </p>
@@ -730,7 +730,7 @@ export const UserDashboardPage: React.FC = () => {
                   </button>
                 </div>
 
-                {userInvestments.length === 0 || userInvestments <= 6 ? (
+                {userInvestments.length === 0 ? (
                   <div className="text-center py-8 text-slate-400 text-xs">
                     No investments made yet. Choose a clothing project above to start!
                   </div>

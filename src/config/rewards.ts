@@ -14,6 +14,9 @@ export const DAILY_REWARD_UGX = 500;
 // Reward paid to the referring user when someone they referred signs up.
 export const REFERRAL_REWARD_UGX = 1000;
 
+// Commission rate applied when calculating referral-based earnings.
+export const REFERRAL_COMMISSION_RATE = 0.20;
+
 // Prefix used when generating human-readable referral codes (e.g. NEST-8F42K).
 export const REFERRAL_CODE_PREFIX = 'NEST';
 

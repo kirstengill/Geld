@@ -513,7 +513,11 @@ export async function signInWithUsername(username: string, password: string): Pr
   }
 
   const profile = await getCurrentProfile();
-  return { user: profile };
+  if (!profile) {
+    await supabase.auth.signOut();
+  return { user: null,
+    error: 'Account profile not found' };
+   };
 }
 
 export async function signUpWithUsername(

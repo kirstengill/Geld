@@ -56,9 +56,18 @@ export const AdminDashboardPage: React.FC = () => {
   const handleAdminSignInSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setAuthError('');
-    const success = await signIn(adminUsernameInput, adminPasswordInput);
-    if (!success) {
-      setAuthError('Invalid Admin Credentials. Username: byte & Password: byte required.');
+    setIsProcessing(true);
+    try {
+      const success = await signIn(adminUsernameInput, adminPasswordInput);
+      if (!success) {
+        setAuthError('Authentication failed. Please verify your Supabase admin credentials.');
+      } else if (currentUser && !currentUser.isAdmin) {
+        setAuthError('Access Denied: This account is authenticated in Supabase, but does not have administrator authorization.');
+      }
+    } catch {
+      setAuthError('An error occurred while communicating with Supabase.');
+    } finally {
+      setIsProcessing(false);
     }
   };
 
@@ -73,26 +82,26 @@ export const AdminDashboardPage: React.FC = () => {
               <ShieldAlert className="w-6 h-6" />
             </div>
             <h1 className="text-2xl font-black text-white">Admin Portal Access</h1>
-            <p className="text-slate-400 text-xs">Enter credentials to access platform administration and user approvals.</p>
+            <p className="text-slate-400 text-xs">Enter your Supabase administrator credentials to access platform management.</p>
           </div>
 
           <form onSubmit={handleAdminSignInSubmit} className="space-y-4">
             {authError && (
-              <div className="bg-red-950/60 border border-red-800 text-red-300 text-xs p-3 rounded-xl">
+              <div className="bg-red-950/60 border border-red-800 text-red-300 text-xs p-3 rounded-xl leading-relaxed">
                 {authError}
               </div>
             )}
 
             <div>
               <label className="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-1">
-                Username
+                Admin Username or Email
               </label>
               <input
                 id="admin-login-username"
                 type="text"
                 value={adminUsernameInput}
                 onChange={e => setAdminUsernameInput(e.target.value)}
-                placeholder="byte"
+                placeholder="admin username or email"
                 required
                 className="w-full px-4 py-3 bg-slate-950 border border-slate-800 rounded-xl text-xs font-semibold text-white focus:outline-none focus:ring-2 focus:ring-red-500"
               />
@@ -107,7 +116,7 @@ export const AdminDashboardPage: React.FC = () => {
                 type="password"
                 value={adminPasswordInput}
                 onChange={e => setAdminPasswordInput(e.target.value)}
-                placeholder="byte"
+                placeholder="••••••••••••"
                 required
                 className="w-full px-4 py-3 bg-slate-950 border border-slate-800 rounded-xl text-xs font-semibold text-white focus:outline-none focus:ring-2 focus:ring-red-500"
               />
@@ -116,9 +125,10 @@ export const AdminDashboardPage: React.FC = () => {
             <button
               id="admin-login-btn"
               type="submit"
-              className="w-full py-3.5 bg-red-600 hover:bg-red-500 active:bg-red-700 text-white font-bold text-xs rounded-xl shadow-lg transition cursor-pointer"
+              disabled={isProcessing}
+              className="w-full py-3.5 bg-red-600 hover:bg-red-500 active:bg-red-700 disabled:opacity-50 text-white font-bold text-xs rounded-xl shadow-lg transition cursor-pointer"
             >
-              Access Admin Dashboard
+              {isProcessing ? 'Authenticating with Supabase...' : 'Access Admin Dashboard'}
             </button>
           </form>
 

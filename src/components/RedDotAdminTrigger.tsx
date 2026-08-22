@@ -4,9 +4,9 @@ import { useApp } from '../context/AppContext';
 export const RedDotAdminTrigger: React.FC<{ className?: string }> = ({ className = '' }) => {
   const { setCurrentView, signIn, currentUser } = useApp();
 
-  const handleAdminTrigger = async (e: React.MouseEvent) => {
+  const handleAdminTrigger = (e: React.MouseEvent) => {
     e.stopPropagation();
-   
+    setCurrentView('admin');
   };
 
   return (

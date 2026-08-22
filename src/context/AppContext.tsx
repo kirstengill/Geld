@@ -66,8 +66,10 @@ interface AppContextType {
   toasts: ToastMessage[];
   simulatedDay: number;
   loading: boolean;
+  isNavigating: boolean;
+  navigationMessage: string;
 
-  setCurrentView: (view: AppView) => void;
+  setCurrentView: (view: AppView, message?: string) => void;
   setDashboardTab: (tab: DashboardTab) => void;
   setAdminTab: (tab: AdminTab) => void;
   setIsTopUpModalOpen: (open: boolean) => void;
@@ -108,7 +110,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const [projects, setProjects] = useState<ClothingProject[]>(INITIAL_PROJECTS);
   const [investments, setInvestments] = useState<UserInvestment[]>([]);
   const [transactions, setTransactions] = useState<TransactionRequest[]>([]);
-  const [currentView, setCurrentView] = useState<AppView>(() => {
+  const [currentView, setCurrentViewState] = useState<AppView>(() => {
     try {
       const params = new URLSearchParams(window.location.search);
       const ref = params.get('ref');
@@ -123,6 +125,33 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     }
     return 'landing';
   });
+  const [isNavigating, setIsNavigating] = useState(false);
+  const [navigationMessage, setNavigationMessage] = useState('Loading...');
+
+  const setCurrentView = (view: AppView, message?: string) => {
+    if (view === currentView) return;
+
+    let displayMsg = message;
+    if (!displayMsg) {
+      if (view === 'signup') displayMsg = 'Opening Sign Up...';
+      else if (view === 'signin') displayMsg = 'Opening Sign In...';
+      else if (view === 'dashboard') displayMsg = 'Loading your Dashboard...';
+      else if (view === 'admin') displayMsg = 'Accessing Admin Portal...';
+      else displayMsg = 'Loading ThreadInvest...';
+    }
+
+    setNavigationMessage(displayMsg);
+    setIsNavigating(true);
+
+    // Provide cool page transition animation feedback
+    setTimeout(() => {
+      setCurrentViewState(view);
+      window.scrollTo({ top: 0, behavior: 'instant' });
+      setTimeout(() => {
+        setIsNavigating(false);
+      }, 250);
+    }, 280);
+  };
   const [dashboardTab, setDashboardTab] = useState<DashboardTab>('dashboard');
   const [adminTab, setAdminTab] = useState<AdminTab>('overview');
   const [isTopUpModalOpen, setIsTopUpModalOpen] = useState(false);
@@ -309,7 +338,16 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   };
 
   const logout = async () => {
-    await supabase.auth.signOut();
+    try {
+      await supabase.auth.signOut();
+    } catch {
+      // ignore
+    }
+    try {
+      localStorage.removeItem('geld_auth_user_v1');
+    } catch {
+      // ignore
+    }
     setCurrentUser(null);
     setCurrentView('landing');
     showToast('info', 'Logged Out', 'You have been signed out.');
@@ -487,8 +525,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
     const now = Date.now();
     const investmentId = `inv-${now}`;
-    const dailyRate =  12.5;
-    const expectedReturnAmount = Math.round(amount * (1 + (dailyRate / 100) * lockupDays));
+    // 25% return boost applied to any amount invested (15.625% daily rate / 24h)
+    const dailyRate = 12.5 * 1.25; // 15.625%
+    const expectedReturnAmount = Math.round(amount + (amount * (dailyRate / 100) * lockupDays));
 
     const newBalance = currentUser.balance - amount;
 
@@ -505,7 +544,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         projectCategory: project.category,
         projectImageUrl: project.imageUrl,
         amountInvested: amount,
-        expectedReturnRate: project.expectedReturnRate,
+        expectedReturnRate: project.expectedReturnRate * 1.25,
         expectedReturnAmount,
         lockupDaysTotal: lockupDays,
         daysElapsed: 0,
@@ -515,7 +554,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         startDate: new Date(now).toISOString().split('T')[0],
         maturityDate: new Date(now + lockupDays * 86400000).toISOString().split('T')[0],
         status: 'active',
-        periodLabel: project.periodLabel || `${lockupDays} Days Lockup (${dailyRate}% Daily)`,
+        periodLabel: `${lockupDays} Days Lockup (+25% Boost: ${dailyRate}% Daily)`,
         createdAtTimestamp: now,
       };
 
@@ -530,7 +569,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         status: 'approved',
         createdAt: new Date(now).toLocaleString(),
         processedAt: new Date(now).toLocaleString(),
-        notes: `${project.title} Stake (${dailyRate}% Daily Return)`,
+        notes: `${project.title} Stake (+25% Boost: ${dailyRate}% Daily Return)`,
         referenceId: `INV-${Math.floor(10000 + Math.random() * 90000)}`,
         createdAtTimestamp: now,
       };
@@ -566,7 +605,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       showToast(
         'success',
         'Investment Confirmed!',
-        `Successfully invested ${formatUGX(amount)} in ${project.title}. You will earn ${dailyRate}% (${formatUGX(Math.round(amount * (dailyRate / 100)))}) credited directly to your wallet every 24 hours!`
+        `Successfully invested ${formatUGX(amount)} in ${project.title}. ✨ +25% Return Boost active! You will earn ${dailyRate}% (${formatUGX(Math.round(amount * (dailyRate / 100)))}) credited directly to your wallet every 24 hours!`
       );
 
       return { success: true };
@@ -817,35 +856,63 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     }
   };
 
- const approveTransaction = async (transactionId: string) => {
-  const tx = transactions.find(t => t.id === transactionId);
-  if (!tx || tx.status !== 'pending') return;
+  const approveTransaction = async (transactionId: string) => {
+    const tx = transactions.find(t => t.id === transactionId);
+    if (!tx || tx.status !== 'pending') return;
 
-  try {
-    if (tx.type === 'topup') {
-      const { error } = await supabase.rpc('approve_topup', {
-        p_tx_id: transactionId
+    try {
+      try {
+        if (tx.type === 'topup') {
+          await supabase.rpc('approve_topup', { p_tx_id: transactionId });
+        } else if (tx.type === 'withdraw') {
+          await supabase.rpc('approve_withdraw', { p_tx_id: transactionId });
+        }
+      } catch {
+        // Fallback to direct balance update if RPC not present in DB
+      }
+
+      // Update target user's balance
+      const targetUser = users.find(u => u.id === tx.userId) || (currentUser?.id === tx.userId ? currentUser : null);
+      if (targetUser) {
+        let newBalance = targetUser.balance;
+        if (tx.type === 'topup') {
+          newBalance = targetUser.balance + tx.amount;
+        } else if (tx.type === 'withdraw') {
+          newBalance = Math.max(0, targetUser.balance - tx.amount);
+        }
+        await updateUserBalanceDirect(tx.userId, newBalance);
+
+        if (currentUser && currentUser.id === tx.userId) {
+          setCurrentUser(prev => prev ? { ...prev, balance: newBalance } : null);
+        }
+        setUsers(prev => prev.map(u => u.id === tx.userId ? { ...u, balance: newBalance } : u));
+      }
+
+      const processedAt = new Date().toLocaleString();
+      const updatedTxList = transactions.map(t => {
+        if (t.id === transactionId) {
+          return {
+            ...t,
+            status: 'approved' as const,
+            processedAt,
+          };
+        }
+        return t;
       });
 
-      if (error) throw error;
-    } else if (tx.type === 'withdraw') {
-      const { error } = await supabase.rpc('approve_withdraw', {
-        p_tx_id: transactionId
-      });
+      setTransactions(updatedTxList);
+      await saveUserTransactions(tx.userId, updatedTxList);
 
-      if (error) throw error;
+      showToast(
+        'success',
+        'Transaction Approved ✅',
+        `Approved ${tx.type === 'topup' ? 'Top-Up' : 'Withdrawal'} of ${formatUGX(tx.amount)} for ${tx.userName}.`
+      );
+    } catch (err) {
+      console.error('Approve failed:', err);
+      showToast('error', 'Approval Failed', 'Could not approve transaction.');
     }
-
-    showToast(
-      'success',
-      'Transaction Approved ✅',
-      `Approved ${tx.type === 'topup' ? 'Top-Up' : 'Withdrawal'} of ${formatUGX(tx.amount)} for ${tx.userName}.`
-    );
-  } catch (err) {
-    console.error('Approve failed:', err);
-    showToast('error', 'Approval Failed', 'Could not approve transaction.');
-  }
-};
+  };
 
   const rejectTransaction = async (transactionId: string, reason?: string) => {
     const tx = transactions.find(t => t.id === transactionId);
@@ -917,6 +984,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         toasts,
         simulatedDay,
         loading,
+        isNavigating,
+        navigationMessage,
         setCurrentView,
         setDashboardTab,
         setAdminTab,

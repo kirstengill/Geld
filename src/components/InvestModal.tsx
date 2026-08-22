@@ -18,10 +18,12 @@ export const InvestModal: React.FC = () => {
   const currentBalance = currentUser?.balance || 0;
   const hasSufficientBalance = currentBalance >= numAmount && numAmount >= project.minStake;
 
-  const expectedReturn = Math.round((numAmount * 0.125 * selectedPeriod) );
+  // 25% return boost applied to all amounts invested (15.625% daily rate / 24h)
+  const dailyRate = 12.5 * 1.25; // 15.625%
+  const expectedReturn = Math.round(numAmount * (dailyRate / 100) * selectedPeriod);
   const totalPayout = numAmount + expectedReturn;
 
-  const quickAmounts = [10000, 50000, 100000, 250000, 500000];
+  const quickAmounts = [10000, 20000, 50000, 100000, 250000, 500000];
 
   const handleInvest = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -179,13 +181,17 @@ export const InvestModal: React.FC = () => {
 
             {/* Expected Return Calculator Card */}
             <div className="bg-gradient-to-br from-violet-50 to-purple-50/50 border border-violet-100 rounded-xl p-3.5 sm:p-4 space-y-2">
+              <div className="bg-gradient-to-r from-emerald-50 to-teal-50 border border-emerald-200 text-emerald-800 rounded-lg px-2.5 py-1 text-[11px] font-bold flex items-center gap-1.5 shadow-xs">
+                <Sparkles className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                <span>+25% Return Boost Active ({dailyRate}% / 24h Yield)</span>
+              </div>
               <div className="flex items-center justify-between text-xs text-slate-600">
                 <span>Stake Amount:</span>
                 <span className="font-semibold text-slate-900">{formatUGX(numAmount)}</span>
               </div>
               <div className="flex items-center justify-between text-xs text-slate-600">
-                <span>Daily Return (12.5% / 24h):</span>
-                <span className="font-bold text-emerald-600">+{formatUGX(Math.round(numAmount * 0.125))} / day</span>
+                <span>Daily Return ({dailyRate}% / 24h):</span>
+                <span className="font-bold text-emerald-600">+{formatUGX(Math.round(numAmount * (dailyRate / 100)))} / day</span>
               </div>
               <div className="flex items-center justify-between text-xs text-slate-600">
                 <span>Lockup Period:</span>

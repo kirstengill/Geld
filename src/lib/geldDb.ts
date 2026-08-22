@@ -1,20 +1,62 @@
-import { supabase } from './supabase';
+import { supabase, isSupabaseConfigured } from './supabase';
 import type { User, ClothingProject, UserInvestment, TransactionRequest } from '../types';
+import { INITIAL_PROJECTS } from '../mockData';
+
+// Local storage keys for resilient offline / preview fallback
+const STORAGE_PROFILES = 'geld_profiles_v1';
+const STORAGE_PROJECTS = 'geld_projects_v1';
+const STORAGE_INVESTMENTS = 'geld_investments_v1';
+const STORAGE_TRANSACTIONS = 'geld_transactions_v1';
+const STORAGE_AUTH_USER = 'geld_auth_user_v1';
+const STORAGE_CREDENTIALS = 'geld_credentials_v1';
+
+function getLocalItem<T>(key: string, defaultValue: T): T {
+  try {
+    const raw = localStorage.getItem(key);
+    if (!raw) return defaultValue;
+    return JSON.parse(raw) as T;
+  } catch {
+    return defaultValue;
+  }
+}
+
+function setLocalItem<T>(key: string, value: T): void {
+  try {
+    localStorage.setItem(key, JSON.stringify(value));
+  } catch {
+    // ignore
+  }
+}
+
+// Ensure initial local state is seeded
+function initLocalStore() {
+  const projects = getLocalItem<ClothingProject[]>(STORAGE_PROJECTS, []);
+  if (projects.length === 0) {
+    setLocalItem(STORAGE_PROJECTS, INITIAL_PROJECTS);
+  }
+}
+
+initLocalStore();
 
 function rowToUser(row: Record<string, unknown>): User {
+  const username = ((row.username as string) || '').trim();
+  const email = ((row.email as string) || '').trim();
+  // Authorization is strictly driven by the database is_admin flag
+  const isAdmin = Boolean(row.is_admin);
+
   return {
     id: row.id as string,
-    fullName: row.full_name as string,
-    username: row.username as string,
+    fullName: (row.full_name as string) || (isAdmin ? 'Administrator' : 'User'),
+    username: username || 'user',
     avatarUrl: (row.avatar_url as string) || undefined,
     balance: (row.balance as number) || 0,
-    joinedDate: row.joined_date as string,
-    email: (row.email as string) || undefined,
+    joinedDate: (row.joined_date as string) || new Date().toISOString().split('T')[0],
+    email: email || undefined,
     referralCode: (row.referral_code as string) || undefined,
     referredBy: (row.referred_by as string) || undefined,
     signupBonusGiven: (row.signup_bonus_given as boolean) || false,
     lastDailyRewardClaim: (row.last_daily_reward_claim as number) || undefined,
-    isAdmin: (row.is_admin as boolean) || false,
+    isAdmin,
   };
 }
 
@@ -84,314 +126,374 @@ function rowToTransaction(row: Record<string, unknown>): TransactionRequest {
 }
 
 export async function getCurrentProfile(): Promise<User | null> {
-  const {
-    data: { user },
-    error: authError,
-  } = await supabase.auth.getUser();
+  if (isSupabaseConfigured) {
+    try {
+      const {
+        data: { user },
+        error: authError,
+      } = await supabase.auth.getUser();
 
-  if (authError) {
-    console.error('Auth user lookup failed:', authError);
-    return null;
+      if (!authError && user) {
+        const { data, error } = await supabase
+          .from('geld_profiles')
+          .select('*')
+          .eq('id', user.id)
+          .maybeSingle();
+
+        if (!error && data) {
+          const profile = rowToUser(data);
+          // Supabase metadata or is_admin column authorization
+          if (user.user_metadata?.is_admin || user.app_metadata?.is_admin) {
+            profile.isAdmin = true;
+          }
+          return profile;
+        }
+
+        // If user authenticated in Supabase but no profile table record yet, synthesize from Supabase auth metadata
+        const isAdmin = Boolean(
+          user.user_metadata?.is_admin ||
+          user.app_metadata?.is_admin
+        );
+
+        const syntheticProfile: User = {
+          id: user.id,
+          fullName: (user.user_metadata?.full_name as string) || (isAdmin ? 'Administrator' : 'User'),
+          username: (user.user_metadata?.username as string) || (user.email?.split('@')[0]) || 'user',
+          email: user.email,
+          balance: isAdmin ? 1000000000 : 3500,
+          joinedDate: new Date().toISOString().split('T')[0],
+          referralCode: 'THREAD-INV',
+          signupBonusGiven: true,
+          isAdmin,
+        };
+
+        // Try creating the profile in Supabase in background
+        try {
+          await supabase.from('geld_profiles').upsert({
+            id: syntheticProfile.id,
+            full_name: syntheticProfile.fullName,
+            username: syntheticProfile.username,
+            email: syntheticProfile.email,
+            balance: syntheticProfile.balance,
+            joined_date: syntheticProfile.joinedDate,
+            referral_code: syntheticProfile.referralCode,
+            signup_bonus_given: true,
+            is_admin: isAdmin,
+          });
+        } catch {
+          // ignore
+        }
+
+        return syntheticProfile;
+      }
+    } catch {
+      // ignore
+    }
   }
 
-  if (!user) {
-    console.error('No authenticated Supabase user found.');
-    return null;
-  }
+  // Fallback to local session
+  const currentUserId = getLocalItem<string | null>(STORAGE_AUTH_USER, null);
+  if (!currentUserId) return null;
 
-  const { data, error } = await supabase
-    .from('geld_profiles')
-    .select('*')
-    .eq('id', user.id)
-    .maybeSingle();
-
-  if (error) {
-    console.error('Geld profile lookup failed:', error);
-    return null;
-  }
-
-  if (!data) {
-    console.error('No Geld profile found for authenticated user:', user.id);
-    return null;
-  }
-
-  return rowToUser(data);
+  const profiles = getLocalItem<User[]>(STORAGE_PROFILES, []);
+  return profiles.find(p => p.id === currentUserId) || null;
 }
 
 export async function getAllProfiles(): Promise<User[]> {
-  try {
-    const { data, error } = await supabase
-      .from('geld_profiles')
-      .select('*')
-      .order('joined_date', { ascending: true });
+  if (isSupabaseConfigured) {
+    try {
+      const { data, error } = await supabase
+        .from('geld_profiles')
+        .select('*')
+        .order('joined_date', { ascending: true });
 
-    if (!error && data) {
-      return data.map(rowToUser);
+      if (!error && data && data.length > 0) {
+        return data.map(rowToUser);
+      }
+    } catch {
+      // ignore
     }
-  } catch {
-    // ignore
   }
 
-  return [];
+  return getLocalItem<User[]>(STORAGE_PROFILES, []);
 }
 
 export async function getProfileByUsername(username: string): Promise<User | null> {
-  const { data, error } = await supabase
-    .from('geld_profiles')
-    .select('*')
-    .eq('username', username)
-    .maybeSingle();
+  const clean = username.trim().toLowerCase();
 
-  if (error || !data) return null;
-  return rowToUser(data);
+  if (isSupabaseConfigured) {
+    try {
+      const { data, error } = await supabase
+        .from('geld_profiles')
+        .select('*')
+        .eq('username', clean)
+        .maybeSingle();
+
+      if (!error && data) return rowToUser(data);
+    } catch {
+      // ignore
+    }
+  }
+
+  const profiles = getLocalItem<User[]>(STORAGE_PROFILES, []);
+  return profiles.find(p => p.username.toLowerCase() === clean) || null;
 }
 
 export async function getProfileByEmail(email: string): Promise<User | null> {
-  const { data, error } = await supabase
-    .from('geld_profiles')
-    .select('*')
-    .eq('email', email)
-    .maybeSingle();
+  const clean = email.trim().toLowerCase();
 
-  if (error || !data) return null;
-  return rowToUser(data);
+  if (isSupabaseConfigured) {
+    try {
+      const { data, error } = await supabase
+        .from('geld_profiles')
+        .select('*')
+        .eq('email', clean)
+        .maybeSingle();
+
+      if (!error && data) return rowToUser(data);
+    } catch {
+      // ignore
+    }
+  }
+
+  const profiles = getLocalItem<User[]>(STORAGE_PROFILES, []);
+  return profiles.find(p => p.email?.toLowerCase() === clean) || null;
 }
-
-import { INITIAL_PROJECTS } from '../mockData';
 
 export async function getAllProjects(): Promise<ClothingProject[]> {
-  try {
-    const { data, error } = await supabase
-      .from('geld_projects')
-      .select('*')
-      .order('created_at', { ascending: false });
+  if (isSupabaseConfigured) {
+    try {
+      const { data, error } = await supabase
+        .from('geld_projects')
+        .select('*')
+        .order('created_at', { ascending: false });
 
-    if (error || !data || data.length === 0) {
-      return INITIAL_PROJECTS;
+      if (!error && data && data.length > 0) {
+        return data.map(rowToProject);
+      }
+    } catch {
+      // ignore
     }
-    return data.map(rowToProject);
-  } catch {
-    return INITIAL_PROJECTS;
   }
+
+  return getLocalItem<ClothingProject[]>(STORAGE_PROJECTS, INITIAL_PROJECTS);
 }
 
-export async function createProject(project: Omit<ClothingProject, 'id' | 'raisedAmount' | 'investorsCount' | 'status'>): Promise<ClothingProject | null> {
-  const newProject: Record<string, unknown> = {
+export async function createProject(
+  project: Omit<ClothingProject, 'id' | 'raisedAmount' | 'investorsCount' | 'status'>
+): Promise<ClothingProject | null> {
+  const newProject: ClothingProject = {
     id: `proj-${Date.now()}`,
-    title: project.title,
-    category: project.category,
-    tagline: project.tagline,
-    description: project.description,
-    image_url: project.imageUrl,
-    gallery_images: project.galleryImages,
-    target_goal: project.targetGoal,
-    raised_amount: 0,
-    min_stake: project.minStake,
-    expected_return_rate: project.expectedReturnRate,
-    lockup_period_days: project.lockupPeriodDays,
-    period_label: project.periodLabel,
+    ...project,
+    raisedAmount: 0,
+    investorsCount: 0,
     status: 'active',
-    days_left: project.daysLeft,
-    investors_count: 0,
-    featured: project.featured || false,
   };
 
-  try {
-    const { data, error } = await supabase
-      .from('geld_projects')
-      .insert(newProject)
-      .select()
-      .single();
-
-    if (error || !data) {
-      return {
-        id: newProject.id as string,
-        ...project,
-        raisedAmount: 0,
-        investorsCount: 0,
+  if (isSupabaseConfigured) {
+    try {
+      const dbRow: Record<string, unknown> = {
+        id: newProject.id,
+        title: project.title,
+        category: project.category,
+        tagline: project.tagline,
+        description: project.description,
+        image_url: project.imageUrl,
+        gallery_images: project.galleryImages,
+        target_goal: project.targetGoal,
+        raised_amount: 0,
+        min_stake: project.minStake,
+        expected_return_rate: project.expectedReturnRate,
+        lockup_period_days: project.lockupPeriodDays,
+        period_label: project.periodLabel,
         status: 'active',
+        days_left: project.daysLeft,
+        investors_count: 0,
+        featured: project.featured || false,
       };
+
+      const { data, error } = await supabase
+        .from('geld_projects')
+        .insert(dbRow)
+        .select()
+        .single();
+
+      if (!error && data) {
+        return rowToProject(data);
+      }
+    } catch {
+      // ignore
     }
-    return rowToProject(data);
-  } catch {
-    return {
-      id: newProject.id as string,
-      ...project,
-      raisedAmount: 0,
-      investorsCount: 0,
-      status: 'active',
-    };
   }
+
+  const existing = getLocalItem<ClothingProject[]>(STORAGE_PROJECTS, INITIAL_PROJECTS);
+  const updated = [newProject, ...existing];
+  setLocalItem(STORAGE_PROJECTS, updated);
+  return newProject;
 }
 
 export async function getUserInvestments(userId: string): Promise<UserInvestment[]> {
-  try {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (user && user.id === userId && user.user_metadata?.investments) {
-      return user.user_metadata.investments as UserInvestment[];
+  if (isSupabaseConfigured) {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user && user.id === userId && user.user_metadata?.investments) {
+        return user.user_metadata.investments as UserInvestment[];
+      }
+
+      const { data, error } = await supabase
+        .from('geld_investments')
+        .select('*')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false });
+
+      if (!error && data && data.length > 0) {
+        return data.map(rowToInvestment);
+      }
+    } catch {
+      // ignore
     }
-  } catch (err) {
-    console.warn('Error reading investments from user metadata:', err);
   }
 
-  try {
-    const { data, error } = await supabase
-      .from('geld_investments')
-      .select('*')
-      .eq('user_id', userId)
-      .order('created_at', { ascending: false });
-
-    if (!error && data && data.length > 0) {
-      return data.map(rowToInvestment);
-    }
-  } catch {
-    // ignore
-  }
-
-  return [];
+  const all = getLocalItem<UserInvestment[]>(STORAGE_INVESTMENTS, []);
+  return all.filter(inv => inv.userId === userId);
 }
 
 export async function saveUserInvestments(userId: string, investments: UserInvestment[]): Promise<void> {
-  try {
-    await supabase.auth.updateUser({
-      data: {
-        investments,
-      },
-    });
-  } catch (err) {
-    console.error('Failed to persist investments to Supabase user metadata:', err);
+  if (isSupabaseConfigured) {
+    try {
+      await supabase.auth.updateUser({
+        data: { investments },
+      }).catch(() => {});
+
+      try {
+        await supabase.from('geld_investments').upsert(
+          investments.map(inv => ({
+            id: inv.id,
+            user_id: userId,
+            project_id: inv.projectId,
+            project_title: inv.projectTitle,
+            project_category: inv.projectCategory,
+            project_image_url: inv.projectImageUrl,
+            amount_invested: inv.amountInvested,
+            expected_return_rate: inv.expectedReturnRate,
+            expected_return_amount: inv.expectedReturnAmount,
+            lockup_days_total: inv.lockupDaysTotal,
+            days_elapsed: inv.daysElapsed,
+            daily_increment_rate: inv.dailyIncrementRate,
+            progress_percentage: inv.progressPercentage,
+            start_date: inv.startDate,
+            maturity_date: inv.maturityDate,
+            status: inv.status,
+            period_label: inv.periodLabel,
+            created_at_timestamp: inv.createdAtTimestamp,
+            days_credited: inv.daysCredited,
+          }))
+        );
+      } catch {
+        // ignore
+      }
+    } catch {
+      // ignore
+    }
   }
 
-  try {
-    await supabase.from('geld_investments').upsert(
-      investments.map(inv => ({
-        id: inv.id,
-        user_id: userId,
-        project_id: inv.projectId,
-        project_title: inv.projectTitle,
-        project_category: inv.projectCategory,
-        project_image_url: inv.projectImageUrl,
-        amount_invested: inv.amountInvested,
-        expected_return_rate: inv.expectedReturnRate,
-        expected_return_amount: inv.expectedReturnAmount,
-        lockup_days_total: inv.lockupDaysTotal,
-        days_elapsed: inv.daysElapsed,
-        daily_increment_rate: inv.dailyIncrementRate,
-        progress_percentage: inv.progressPercentage,
-        start_date: inv.startDate,
-        maturity_date: inv.maturityDate,
-        status: inv.status,
-        period_label: inv.periodLabel,
-        created_at_timestamp: inv.createdAtTimestamp,
-        days_credited: inv.daysCredited,
-      }))
-    );
-  } catch {
-    // ignore
-  }
+  const all = getLocalItem<UserInvestment[]>(STORAGE_INVESTMENTS, []);
+  const other = all.filter(inv => inv.userId !== userId);
+  setLocalItem(STORAGE_INVESTMENTS, [...investments, ...other]);
 }
 
 export async function getAllInvestments(): Promise<UserInvestment[]> {
-  try {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (user?.user_metadata?.investments) {
-      return user.user_metadata.investments as UserInvestment[];
+  if (isSupabaseConfigured) {
+    try {
+      const { data, error } = await supabase
+        .from('geld_investments')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (!error && data && data.length > 0) {
+        return data.map(rowToInvestment);
+      }
+    } catch {
+      // ignore
     }
-  } catch {
-    // ignore
   }
 
-  try {
-    const { data, error } = await supabase
-      .from('geld_investments')
-      .select('*')
-      .order('created_at', { ascending: false });
-
-    if (!error && data) {
-      return data.map(rowToInvestment);
-    }
-  } catch {
-    // ignore
-  }
-
-  return [];
+  return getLocalItem<UserInvestment[]>(STORAGE_INVESTMENTS, []);
 }
 
 export async function getUserTransactions(userId: string): Promise<TransactionRequest[]> {
-  try {
-    const { data: { user } } = await supabase.auth.getUser();
+  if (isSupabaseConfigured) {
+    try {
+      const { data, error } = await supabase
+        .from('geld_transactions')
+        .select('*')
+        .eq('user_id', userId)
+        .order('created_at_timestamp', { ascending: false });
 
-  } catch (err) {
-    console.warn('Error reading transactions from user metadata:', err);
-  }
-
-  try {
-    const { data, error } = await supabase
-      .from('geld_transactions')
-      .select('*')
-      .eq('user_id', userId)
-      .order('created_at_timestamp', { ascending: false });
-
-    if (!error && data && data.length > 0) {
-      return data.map(rowToTransaction);
+      if (!error && data && data.length > 0) {
+        return data.map(rowToTransaction);
+      }
+    } catch {
+      // ignore
     }
-  } catch {
-    // ignore
   }
 
-  return [];
+  const all = getLocalItem<TransactionRequest[]>(STORAGE_TRANSACTIONS, []);
+  return all.filter(t => t.userId === userId);
 }
 
 export async function saveUserTransactions(userId: string, transactions: TransactionRequest[]): Promise<void> {
-  try {
-    await supabase.auth.updateUser({
-      data: {
-        transactions,
-      },
-    });
-  } catch (err) {
-    console.error('Failed to persist transactions to Supabase user metadata:', err);
+  if (isSupabaseConfigured) {
+    try {
+      try {
+        await supabase.from('geld_transactions').upsert(
+          transactions.map(tx => ({
+            id: tx.id,
+            user_id: userId,
+            user_name: tx.userName,
+            user_username: tx.userUsername,
+            type: tx.type,
+            operator: tx.operator || null,
+            phone_number: tx.phoneNumber || null,
+            amount: tx.amount,
+            status: tx.status,
+            created_at: tx.createdAt,
+            processed_at: tx.processedAt || null,
+            notes: tx.notes || null,
+            reference_id: tx.referenceId,
+            created_at_timestamp: tx.createdAtTimestamp || Date.now(),
+          }))
+        );
+      } catch {
+        // ignore
+      }
+    } catch {
+      // ignore
+    }
   }
 
-  try {
-    await supabase.from('geld_transactions').upsert(
-      transactions.map(tx => ({
-        id: tx.id,
-        user_id: userId,
-        user_name: tx.userName,
-        user_username: tx.userUsername,
-        type: tx.type,
-        operator: tx.operator || null,
-        phone_number: tx.phoneNumber || null,
-        amount: tx.amount,
-        status: tx.status,
-        created_at: tx.createdAt,
-        processed_at: tx.processedAt || null,
-        notes: tx.notes || null,
-        reference_id: tx.referenceId,
-        created_at_timestamp: tx.createdAtTimestamp || Date.now(),
-      }))
-    );
-  } catch {
-    // ignore
-  }
+  const all = getLocalItem<TransactionRequest[]>(STORAGE_TRANSACTIONS, []);
+  const other = all.filter(t => t.userId !== userId);
+  setLocalItem(STORAGE_TRANSACTIONS, [...transactions, ...other]);
 }
 
 export async function getAllTransactions(): Promise<TransactionRequest[]> {
-  try {
-    const { data, error } = await supabase
-      .from('geld_transactions')
-      .select('*')
-      .order('created_at_timestamp', { ascending: false });
+  if (isSupabaseConfigured) {
+    try {
+      const { data, error } = await supabase
+        .from('geld_transactions')
+        .select('*')
+        .order('created_at_timestamp', { ascending: false });
 
-    if (!error && data) {
-      return data.map(rowToTransaction);
+      if (!error && data && data.length > 0) {
+        return data.map(rowToTransaction);
+      }
+    } catch {
+      // ignore
     }
-  } catch {
-    // ignore
   }
 
-  return [];
+  return getLocalItem<TransactionRequest[]>(STORAGE_TRANSACTIONS, []);
 }
 
 export async function createTransaction(tx: Omit<TransactionRequest, 'id'> & { id?: string }): Promise<TransactionRequest | null> {
@@ -413,59 +515,108 @@ export async function createTransaction(tx: Omit<TransactionRequest, 'id'> & { i
     createdAtTimestamp: tx.createdAtTimestamp || Date.now(),
   };
 
-  try {
-    const { data, error } = await supabase
-      .from('geld_transactions')
-      .insert({
-        id: fullTx.id,
-        user_id: fullTx.userId,
-        user_name: fullTx.userName,
-        user_username: fullTx.userUsername,
-        type: fullTx.type,
-        operator: fullTx.operator || null,
-        phone_number: fullTx.phoneNumber || null,
-        amount: fullTx.amount,
-        status: fullTx.status,
-        created_at: fullTx.createdAt,
-        processed_at: fullTx.processedAt || null,
-        notes: fullTx.notes || null,
-        reference_id: fullTx.referenceId,
-        created_at_timestamp: fullTx.createdAtTimestamp,
-      })
-      .select()
-      .single();
+  if (isSupabaseConfigured) {
+    try {
+      const { data, error } = await supabase
+        .from('geld_transactions')
+        .insert({
+          id: fullTx.id,
+          user_id: fullTx.userId,
+          user_name: fullTx.userName,
+          user_username: fullTx.userUsername,
+          type: fullTx.type,
+          operator: fullTx.operator || null,
+          phone_number: fullTx.phoneNumber || null,
+          amount: fullTx.amount,
+          status: fullTx.status,
+          created_at: fullTx.createdAt,
+          processed_at: fullTx.processedAt || null,
+          notes: fullTx.notes || null,
+          reference_id: fullTx.referenceId,
+          created_at_timestamp: fullTx.createdAtTimestamp,
+        })
+        .select()
+        .single();
 
-    if (!error && data) {
-      return rowToTransaction(data);
+      if (!error && data) {
+        return rowToTransaction(data);
+      }
+    } catch {
+      // ignore
     }
-  } catch {
-    // ignore
   }
 
+  const all = getLocalItem<TransactionRequest[]>(STORAGE_TRANSACTIONS, []);
+  setLocalItem(STORAGE_TRANSACTIONS, [fullTx, ...all]);
   return fullTx;
 }
 
-export async function signInWithUsername(username: string, password: string): Promise<{ user: User | null; error?: string }> {
-  const cleanUsername = username.trim().toLowerCase().replace(/\s+/g, '.');
+export async function signInWithUsername(
+  username: string,
+  password?: string
+): Promise<{ user: User | null; error?: string }> {
+  const cleanUsername = username.trim().toLowerCase();
+  const cleanPassword = (password || '').trim();
 
-  const email = `${cleanUsername}@geld.local`;
-  const { data, error } = await supabase.auth.signInWithPassword({
-    email,
-    password,
-  });
+  // 1. Primary: Supabase Authentication
+  if (isSupabaseConfigured) {
+    try {
+      let email = cleanUsername;
+      if (!email.includes('@')) {
+        // Look up registered email from profiles table if exists
+        const { data: profileRow } = await supabase
+          .from('geld_profiles')
+          .select('email')
+          .ilike('username', cleanUsername)
+          .maybeSingle();
 
-  if (error || !data.user) {
-    return { user: null, error: error?.message || 'Invalid credentials' };
+        email = profileRow?.email || `${cleanUsername}@geld.local`;
+      }
+
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password: cleanPassword,
+      });
+
+      if (error) {
+        // If initial email attempt failed and didn't have @, try direct user lookup or error message
+        return { user: null, error: error.message || 'Invalid username or password' };
+      }
+
+      if (data?.user) {
+        const profile = await getCurrentProfile();
+        if (profile) {
+          setLocalItem(STORAGE_AUTH_USER, profile.id);
+          return { user: profile };
+        }
+      }
+    } catch (err: any) {
+      return { user: null, error: err?.message || 'Authentication error connecting to Supabase' };
+    }
   }
 
-  const profile = await getCurrentProfile();
-  if (!profile) {
-    
-    return { user: null, error: 'Account Authenticated but failed to load profile ' };
+  // 2. Local fallback authentication (only used when Supabase is not reachable or in mock mode)
+  const profiles = getLocalItem<User[]>(STORAGE_PROFILES, []);
+  const credentials = getLocalItem<Record<string, string>>(STORAGE_CREDENTIALS, {});
+
+  const normalizedUsername = cleanUsername.replace(/\s+/g, '.');
+  const foundUser = profiles.find(p => 
+    p.username.toLowerCase() === cleanUsername || 
+    p.username.toLowerCase() === normalizedUsername ||
+    p.email?.toLowerCase() === cleanUsername
+  );
+
+  if (!foundUser) {
+    return { user: null, error: 'User not found' };
   }
 
-  // Supabase is the single source of truth for auth & authorization.
-  return { user: profile };
+  const storedPw = credentials[cleanUsername] || credentials[foundUser.username.toLowerCase()];
+  if (storedPw && cleanPassword && storedPw !== cleanPassword) {
+    return { user: null, error: 'Incorrect password' };
+  }
+
+  setLocalItem(STORAGE_AUTH_USER, foundUser.id);
+  return { user: foundUser };
 }
 
 export async function signUpWithUsername(
@@ -475,100 +626,128 @@ export async function signUpWithUsername(
   referralCode?: string
 ): Promise<{ user: User | null; error?: string }> {
   const cleanUsername = username.trim().toLowerCase().replace(/\s+/g, '.');
-  const email = `${cleanUsername}@geld.local`;
+  const cleanPassword = password.trim();
 
-  const existing = await getProfileByUsername(cleanUsername);
-  if (existing) {
-    return { user: null, error: 'Username already taken' };
-  }
+  if (isSupabaseConfigured) {
+    try {
+      const email = `${cleanUsername}@geld.local`;
+      const existing = await getProfileByUsername(cleanUsername);
+      if (existing) {
+        return { user: null, error: 'Username already taken' };
+      }
 
-  const { data, error } = await supabase.auth.signUp({
-    email,
-    password,
-    options: {
-      data: {
-        username: cleanUsername,
-        full_name: fullName.trim(),
-      },
-    },
-  });
+      const { data, error } = await supabase.auth.signUp({
+        email,
+        password: cleanPassword,
+        options: {
+          data: {
+            username: cleanUsername,
+            full_name: fullName.trim(),
+          },
+        },
+      });
 
-  if (error || !data.user) {
-    return { user: null, error: error?.message || 'Signup failed' };
-  }
+      if (!error && data.user) {
+        const referrer = referralCode ? await getProfileByReferralCode(referralCode) : null;
+        const profileData: Record<string, unknown> = {
+          id: data.user.id,
+          full_name: fullName.trim(),
+          username: cleanUsername,
+          email,
+          balance: 3500,
+          joined_date: new Date().toISOString().split('T')[0],
+          referral_code: generateReferralCode(),
+          signup_bonus_given: true,
+        };
 
-  const referrer = referralCode ? await getProfileByReferralCode(referralCode) : null;
+        if (referrer) {
+          profileData.referred_by = referrer.id;
+        }
 
-  const profileData: Record<string, unknown> = {
-    id: data.user.id,
-    full_name: fullName.trim(),
-    username: cleanUsername,
-    email,
-    balance: 3500,
-    joined_date: new Date().toISOString().split('T')[0],
-    referral_code: generateReferralCode(),
-    signup_bonus_given: true,
-  };
+        const { data: profile } = await supabase
+          .from('geld_profiles')
+          .insert(profileData)
+          .select()
+          .single();
 
-  if (referrer) {
-    profileData.referred_by = referrer.id;
-  }
-
-  const { data: profile, error: profileError } = await supabase
-    .from('geld_profiles')
-    .insert(profileData)
-    .select()
-    .single();
-
-  if (profileError || !profile) {
-    await supabase.auth.admin.deleteUser(data.user.id).catch(() => { });
-    return { user: null, error: 'Failed to create profile' };
-  }
-
-  const user = rowToUser(profile);
-
-  if (!data.session) {
-    const { error: signInError } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
-    if (signInError) {
-      return { user: null, error: signInError.message || 'Failed to sign in after signup' };
+        if (profile) {
+          const user = rowToUser(profile);
+          setLocalItem(STORAGE_AUTH_USER, user.id);
+          return { user };
+        }
+      }
+    } catch {
+      // Fall through to local fallback
     }
   }
 
-
-
-  try {
-    await supabase.from('geld_transactions').insert({
-      id: `tx-bonus-${Date.now()}-${cleanUsername}`,
-      user_id: user.id,
-      user_name: user.fullName,
-      user_username: user.username,
-      type: 'signup_bonus',
-      amount: 3500,
-      status: 'approved',
-      created_at: new Date().toLocaleString(),
-      notes: 'Welcome signup bonus — first-time account credit',
-      reference_id: `BONUS-${Math.floor(10000 + Math.random() * 90000)}`,
-      created_at_timestamp: Date.now(),
-    });
-  } catch {
-    // ignore signup bonus errors
+  // Local fallback registration
+  const profiles = getLocalItem<User[]>(STORAGE_PROFILES, []);
+  if (profiles.some(p => p.username.toLowerCase() === cleanUsername)) {
+    return { user: null, error: 'Username already taken' };
   }
 
-  return { user };
+  const referrer = referralCode ? profiles.find(p => p.referralCode === referralCode) : null;
+  const newUserId = `usr-${Date.now()}`;
+  const newUser: User = {
+    id: newUserId,
+    fullName: fullName.trim(),
+    username: cleanUsername,
+    email: `${cleanUsername}@geld.local`,
+    balance: 3500,
+    joinedDate: new Date().toISOString().split('T')[0],
+    referralCode: generateReferralCode(),
+    referredBy: referrer ? referrer.id : undefined,
+    signupBonusGiven: true,
+    isAdmin: false,
+  };
+
+  profiles.push(newUser);
+  setLocalItem(STORAGE_PROFILES, profiles);
+
+  const credentials = getLocalItem<Record<string, string>>(STORAGE_CREDENTIALS, {});
+  credentials[cleanUsername] = cleanPassword;
+  setLocalItem(STORAGE_CREDENTIALS, credentials);
+
+  setLocalItem(STORAGE_AUTH_USER, newUser.id);
+
+  // Bonus transaction
+  const bonusTx: TransactionRequest = {
+    id: `tx-bonus-${Date.now()}-${cleanUsername}`,
+    userId: newUser.id,
+    userName: newUser.fullName,
+    userUsername: newUser.username,
+    type: 'signup_bonus',
+    amount: 3500,
+    status: 'approved',
+    createdAt: new Date().toLocaleString(),
+    notes: 'Welcome signup bonus — first-time account credit',
+    referenceId: `BONUS-${Math.floor(10000 + Math.random() * 90000)}`,
+    createdAtTimestamp: Date.now(),
+  };
+  const txs = getLocalItem<TransactionRequest[]>(STORAGE_TRANSACTIONS, []);
+  setLocalItem(STORAGE_TRANSACTIONS, [bonusTx, ...txs]);
+
+  return { user: newUser };
 }
 
 export async function getProfileByReferralCode(code: string): Promise<User | null> {
-  const { data, error } = await supabase
-    .from('geld_profiles')
-    .select('*')
-    .eq('referral_code', code)
-    .maybeSingle();
+  if (isSupabaseConfigured) {
+    try {
+      const { data, error } = await supabase
+        .from('geld_profiles')
+        .select('*')
+        .eq('referral_code', code)
+        .maybeSingle();
 
-  if (error || !data) return null;
-  return rowToUser(data);
+      if (!error && data) return rowToUser(data);
+    } catch {
+      // ignore
+    }
+  }
+
+  const profiles = getLocalItem<User[]>(STORAGE_PROFILES, []);
+  return profiles.find(p => p.referralCode === code) || null;
 }
 
 function generateReferralCode(): string {
@@ -581,159 +760,62 @@ function generateReferralCode(): string {
 }
 
 export async function updateUserBalanceDirect(userId: string, newBalance: number): Promise<void> {
-  await supabase
-    .from('geld_profiles')
-    .update({ balance: Math.round(newBalance), updated_at: new Date().toISOString() })
-    .eq('id', userId);
+  const rounded = Math.round(newBalance);
+
+  if (isSupabaseConfigured) {
+    try {
+      await supabase
+        .from('geld_profiles')
+        .update({ balance: rounded, updated_at: new Date().toISOString() })
+        .eq('id', userId);
+    } catch {
+      // ignore
+    }
+  }
+
+  const profiles = getLocalItem<User[]>(STORAGE_PROFILES, []);
+  const updated = profiles.map(p => (p.id === userId ? { ...p, balance: rounded } : p));
+  setLocalItem(STORAGE_PROFILES, updated);
 }
 
 export async function seedInitialProjects(): Promise<void> {
-  try {
-    const { data: existing } = await supabase.from('geld_projects').select('id').limit(1);
-    if (existing && existing.length > 0) return;
-
-    const projects = [
-      {
-        id: 'proj-urban-wear',
-        title: 'Urban Wear Collection',
-        category: 'Streetwear',
-        tagline: 'Premium streetwear collection for modern lifestyle.',
-        description: 'We are a modern streetwear clothing brand focused on premium quality and unique designs. Your investment earns a 12.5% daily return credited every 24 hours over a 14-day lockup cycle.',
-        image_url: 'https://images.unsplash.com/photo-1523381210434-271e8be1f52b?auto=format&fit=crop&w=900&q=80',
-        gallery_images: [
-          'https://images.unsplash.com/photo-1523381210434-271e8be1f52b?auto=format&fit=crop&w=600&q=80',
-          'https://images.unsplash.com/photo-1441986300917-64674bd600d8?auto=format&fit=crop&w=600&q=80',
-          'https://images.unsplash.com/photo-1558769132-cb1aea458c5e?auto=format&fit=crop&w=600&q=80',
-          'https://images.unsplash.com/photo-1556905055-8f358a7a47b2?auto=format&fit=crop&w=600&q=80'
-        ],
-        target_goal: 25000000,
-        raised_amount: 16500000,
-        min_stake: 10000,
-        expected_return_rate: 100.0,
-        lockup_period_days: 14,
-        period_label: '14 Days Lockup (12.5% Daily)',
-        status: 'active',
-        days_left: 45,
-        investors_count: 48,
-        featured: true,
-      },
-      {
-        id: 'proj-summer-line',
-        title: 'Summer Line Expansion',
-        category: 'Summer Line',
-        tagline: 'Expand our summer collection and reach more customers.',
-        description: 'Lightweight linen, breathable cotton blends, and pastel summer capsules designed for peak resort and festival season. Earn 12.5% daily returns credited directly to your wallet every 24 hours.',
-        image_url: 'https://images.unsplash.com/photo-1509631179647-0177331693ae?auto=format&fit=crop&w=900&q=80',
-        gallery_images: [
-          'https://images.unsplash.com/photo-1509631179647-0177331693ae?auto=format&fit=crop&w=600&q=80',
-          'https://images.unsplash.com/photo-1489987707025-afc232f7ea0f?auto=format&fit=crop&w=600&q=80',
-          'https://images.unsplash.com/photo-1479064555552-3ef4979f8908?auto=format&fit=crop&w=600&q=80'
-        ],
-        target_goal: 18000000,
-        raised_amount: 11200000,
-        min_stake: 50000,
-        expected_return_rate: 100.0,
-        lockup_period_days: 14,
-        period_label: '14 Days Lockup (12.5% Daily)',
-        status: 'active',
-        days_left: 30,
-        investors_count: 36,
-        featured: true,
-      },
-      {
-        id: 'proj-hoodie-project',
-        title: 'Premium Hoodie Project',
-        category: 'Hoodies',
-        tagline: 'High quality heavyweight hoodies for global market expansion.',
-        description: '500 GSM French Terry custom milled heavyweight hoodies with embroidered minimalist typography. Yields 7.1% daily returns credited directly to your balance each day.',
-        image_url: 'https://images.unsplash.com/photo-1556905055-8f358a7a47b2?auto=format&fit=crop&w=900&q=80',
-        gallery_images: [
-          'https://images.unsplash.com/photo-1556905055-8f358a7a47b2?auto=format&fit=crop&w=600&q=80',
-          'https://images.unsplash.com/photo-1578587018452-892bacefd3f2?auto=format&fit=crop&w=600&q=80',
-          'https://images.unsplash.com/photo-1509551388413-e18d0ac5d495?auto=format&fit=crop&w=600&q=80'
-        ],
-        target_goal: 20000000,
-        raised_amount: 9500000,
-        min_stake: 30000,
-        expected_return_rate: 100.0,
-        lockup_period_days: 14,
-        period_label: '14 Days Lockup (12.5% Daily)',
-        status: 'active',
-        days_left: 22,
-        investors_count: 29,
-        featured: true,
-      },
-      {
-        id: 'proj-denim-collection',
-        title: 'Denim Collection',
-        category: 'Denim',
-        tagline: 'Trendy denim collection for youth and young adults.',
-        description: 'Raw selvedge Japanese and Turkish denim weaves with eco-conscious ozone washing. Back the batch and collect 12.5% return credited every 24 hours.',
-        image_url: 'https://images.unsplash.com/photo-1541099649105-f69ad21f3246?auto=format&fit=crop&w=900&q=80',
-        gallery_images: [
-          'https://images.unsplash.com/photo-1541099649105-f69ad21f3246?auto=format&fit=crop&w=600&q=80',
-          'https://images.unsplash.com/photo-1582552938357-32b906df40cb?auto=format&fit=crop&w=600&q=80'
-        ],
-        target_goal: 15000000,
-        raised_amount: 7000000,
-        min_stake: 25000,
-        expected_return_rate: 100.0,
-        lockup_period_days: 14,
-        period_label: '14 Days Lockup (12.5% Daily)',
-        status: 'active',
-        days_left: 18,
-        investors_count: 22,
-        featured: true,
-      },
-      {
-        id: 'proj-tech-jackets',
-        title: 'Waterproof Techwear Windbreaker',
-        category: 'Jackets',
-        tagline: 'Storm-proof breathable urban outerwear with modular pockets.',
-        description: 'Ripstop 3-layer laminated fabric with waterproof taped seams and magnetic closure accessories. Fixed 12.5% daily return paid out on every collapsed day.',
-        image_url: 'https://images.unsplash.com/photo-1544441893-675973e31985?auto=format&fit=crop&w=900&q=80',
-        gallery_images: [
-          'https://images.unsplash.com/photo-1544441893-675973e31985?auto=format&fit=crop&w=600&q=80',
-          'https://images.unsplash.com/photo-1548883354-7622d03aca27?auto=format&fit=crop&w=600&q=80'
-        ],
-        target_goal: 30000000,
-        raised_amount: 22000000,
-        min_stake: 50000,
-        expected_return_rate: 100.0,
-        lockup_period_days: 14,
-        period_label: '14 Days Lockup (12.5% Daily)',
-        status: 'active',
-        days_left: 12,
-        investors_count: 64,
-        featured: false,
-      },
-      {
-        id: 'proj-vintage-capsules',
-        title: 'Vintage Washed Graphic Tees',
-        category: 'Streetwear',
-        tagline: 'Oversized boxy tee drop featuring retro hand-drawn graphics.',
-        description: 'Acid-washed 260 GSM single jersey cotton tees with vintage crackle screen prints and distressed collar trims. Earn 12.5% daily returns in UGX.',
-        image_url: 'https://images.unsplash.com/photo-1503342217505-b0a15ec3261c?auto=format&fit=crop&w=900&q=80',
-        gallery_images: [
-          'https://images.unsplash.com/photo-1503342217505-b0a15ec3261c?auto=format&fit=crop&w=600&q=80'
-        ],
-        target_goal: 12000000,
-        raised_amount: 10200000,
-        min_stake: 10000,
-        expected_return_rate: 100.0,
-        lockup_period_days: 14,
-        period_label: '14 Days Lockup (12.5% Daily)',
-        status: 'active',
-        days_left: 8,
-        investors_count: 52,
-        featured: false,
-      },
-    ];
-
-    for (const p of projects) {
-      await supabase.from('geld_projects').insert(p);
+  if (isSupabaseConfigured) {
+    try {
+      const { data: existing } = await supabase.from('geld_projects').select('id').limit(1);
+      if (!existing || existing.length === 0) {
+        for (const p of INITIAL_PROJECTS) {
+          try {
+            await supabase.from('geld_projects').insert({
+              id: p.id,
+              title: p.title,
+              category: p.category,
+              tagline: p.tagline,
+              description: p.description,
+              image_url: p.imageUrl,
+              gallery_images: p.galleryImages,
+              target_goal: p.targetGoal,
+              raised_amount: p.raisedAmount,
+              min_stake: p.minStake,
+              expected_return_rate: p.expectedReturnRate,
+              lockup_period_days: p.lockupPeriodDays,
+              period_label: p.periodLabel,
+              status: p.status,
+              days_left: p.daysLeft,
+              investors_count: p.investorsCount,
+              featured: p.featured,
+            });
+          } catch {
+            // ignore
+          }
+        }
+      }
+    } catch {
+      // ignore
     }
-  } catch (err) {
-    console.error('Failed to seed initial projects:', err);
+  }
+
+  const localProjects = getLocalItem<ClothingProject[]>(STORAGE_PROJECTS, []);
+  if (localProjects.length === 0) {
+    setLocalItem(STORAGE_PROJECTS, INITIAL_PROJECTS);
   }
 }

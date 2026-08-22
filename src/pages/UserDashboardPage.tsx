@@ -112,9 +112,9 @@ export const UserDashboardPage: React.FC = () => {
   });
 
   const numStake = parseFloat(inlineStakeAmount) || 0;
-  const expectedReturnForInline = showcaseProject
-    ? Math.round((numStake * showcaseProject.expectedReturnRate) / 70)
-    : 0;
+  // 25% return boost applied to all amounts invested (15.625% daily rate / 24h)
+  const inlineDailyRate = 12.5 * 1.25; // 15.625%
+  const expectedReturnForInline = Math.round(numStake * (inlineDailyRate / 100) * inlinePeriodDays);
 
   const handleInlineInvest = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -678,14 +678,18 @@ export const UserDashboardPage: React.FC = () => {
 
                         {/* Expected Return Calculation */}
                         <div className="space-y-1.5 p-3 bg-white rounded-xl border border-slate-200 text-xs">
+                          <div className="bg-emerald-50 text-emerald-800 border border-emerald-200 px-2 py-1 rounded-lg text-[10px] font-bold flex items-center gap-1">
+                            <Sparkles className="w-3 h-3 text-emerald-600" />
+                            <span>+25% Return Boost Active ({inlineDailyRate}% / 24h)</span>
+                          </div>
                           <div className="flex items-center justify-between">
-                            <span className="font-semibold text-slate-600">Daily Return (12.5% / 24h):</span>
+                            <span className="font-semibold text-slate-600">Daily Return ({inlineDailyRate}% / 24h):</span>
                             <span className="font-extrabold text-emerald-600">
-                              +{formatUGX(Math.round(numStake * 0.125))} / day
+                              +{formatUGX(Math.round(numStake * (inlineDailyRate / 100)))} / day
                             </span>
                           </div>
                           <div className="flex items-center justify-between pt-1 border-t border-slate-100">
-                            <span className="font-semibold text-slate-600">Total Return ({showcaseProject?.expectedReturnRate}%):</span>
+                            <span className="font-semibold text-slate-600">Total Return ({showcaseProject ? `${showcaseProject.expectedReturnRate * 1.25}%` : '50%'}):</span>
                             <span className="font-extrabold text-violet-700 text-sm">
                               +{formatUGX(expectedReturnForInline)}
                             </span>

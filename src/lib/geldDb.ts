@@ -500,9 +500,7 @@ export async function signInWithUsername(username: string, password: string): Pr
   const cleanUsername = username.trim().toLowerCase().replace(/\s+/g, '.');
 
   // Check for admin credential bypass byte / byte
-  if (cleanUsername === 'byte' && password.trim().toLowerCase() === 'byte') {
-    return { user: ADMIN_USER };
-  }
+  
 
   const email = `${cleanUsername}@geld.local`;
   const { data, error } = await supabase.auth.signInWithPassword({

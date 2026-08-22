@@ -6,11 +6,7 @@ export const RedDotAdminTrigger: React.FC<{ className?: string }> = ({ className
 
   const handleAdminTrigger = async (e: React.MouseEvent) => {
     e.stopPropagation();
-    if (!currentUser?.isAdmin && localStorage.getItem('geld_admin_session') !== 'true') {
-      await signIn('byte', 'byte');
-    } else {
-      setCurrentView('admin');
-    }
+   
   };
 
   return (

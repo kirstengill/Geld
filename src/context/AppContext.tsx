@@ -42,7 +42,6 @@ import {
   getProfileByReferralCode,
   updateUserBalanceDirect,
   seedInitialProjects,
-  ADMIN_USER,
 } from '../lib/geldDb';
 
 interface ToastMessage {
@@ -179,7 +178,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       setTransactions(allTransactions);
       setUsers(allProfiles);
 
-      
+
       const { data: { session } } = await supabase.auth.getSession();
         if (session?.user) {
           const profile = allProfiles.find(p => p.id === session.user.id) || null;
@@ -189,7 +188,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             setInvestments(userInvestments);
           }
         }
-      
+
     } catch (err) {
       console.error('Failed to load data:', err);
     } finally {
@@ -210,7 +209,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (!mounted) return;
-     
+
       if (event === 'SIGNED_IN' && session?.user) {
         const [allProfiles, allTxs] = await Promise.all([
           getAllProfiles(),
@@ -246,13 +245,10 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     const cleanU = username.trim().toLowerCase();
     const cleanP = password.trim().toLowerCase();
 
-   
+
 
     const result = await signInWithUsername(username, password);
     if (result.user) {
-      if (result.user.isAdmin) {
-       
-      }
       setCurrentUser(result.user);
       const [userInvestments, allTxs, allProfiles] = await Promise.all([
         getUserInvestments(result.user.id),
@@ -313,7 +309,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   };
 
   const logout = async () => {
-    localStorage.removeItem('geld_admin_session');
     await supabase.auth.signOut();
     setCurrentUser(null);
     setCurrentView('landing');

@@ -98,7 +98,6 @@ export async function getCurrentProfile(): Promise<User | null> {
 }
 
 export async function getAllProfiles(): Promise<User[]> {
-  let dbProfiles: User[] = [];
   try {
     const { data, error } = await supabase
       .from('geld_profiles')
@@ -106,31 +105,13 @@ export async function getAllProfiles(): Promise<User[]> {
       .order('joined_date', { ascending: true });
 
     if (!error && data) {
-      dbProfiles = data.map(rowToUser);
+      return data.map(rowToUser);
     }
   } catch {
     // ignore
   }
 
-  // Merge with localStorage profiles if any
-  try {
-    const local = localStorage.getItem('geld_global_profiles');
-    if (local) {
-      const localProfiles: User[] = JSON.parse(local);
-      const mergedMap = new Map<string, User>();
-      dbProfiles.forEach(p => mergedMap.set(p.id, p));
-      localProfiles.forEach(p => {
-        if (!mergedMap.has(p.id) || mergedMap.get(p.id)?.balance !== p.balance) {
-          mergedMap.set(p.id, p);
-        }
-      });
-      return Array.from(mergedMap.values());
-    }
-  } catch {
-    // ignore
-  }
-
-  return dbProfiles;
+  return [];
 }
 
 export async function getProfileByUsername(username: string): Promise<User | null> {
@@ -318,7 +299,7 @@ export async function getAllInvestments(): Promise<UserInvestment[]> {
 export async function getUserTransactions(userId: string): Promise<TransactionRequest[]> {
   try {
     const { data: { user } } = await supabase.auth.getUser();
-    
+
   } catch (err) {
     console.warn('Error reading transactions from user metadata:', err);
   }
@@ -341,18 +322,6 @@ export async function getUserTransactions(userId: string): Promise<TransactionRe
 }
 
 export async function saveUserTransactions(userId: string, transactions: TransactionRequest[]): Promise<void> {
-  // 1. Sync to local storage global ledger
-  try {
-    const localStr = localStorage.getItem('geld_global_transactions');
-    const existing: TransactionRequest[] = localStr ? JSON.parse(localStr) : [];
-    const map = new Map<string, TransactionRequest>();
-    existing.forEach(t => map.set(t.id, t));
-    transactions.forEach(t => map.set(t.id, t));
-    localStorage.setItem('geld_global_transactions', JSON.stringify(Array.from(map.values())));
-  } catch {
-    // ignore
-  }
-
   try {
     await supabase.auth.updateUser({
       data: {
@@ -388,7 +357,6 @@ export async function saveUserTransactions(userId: string, transactions: Transac
 }
 
 export async function getAllTransactions(): Promise<TransactionRequest[]> {
-  let dbTxs: TransactionRequest[] = [];
   try {
     const { data, error } = await supabase
       .from('geld_transactions')
@@ -396,32 +364,13 @@ export async function getAllTransactions(): Promise<TransactionRequest[]> {
       .order('created_at_timestamp', { ascending: false });
 
     if (!error && data) {
-      dbTxs = data.map(rowToTransaction);
+      return data.map(rowToTransaction);
     }
   } catch {
     // ignore
   }
 
-  // Merge with local storage global transactions
-  try {
-    const local = localStorage.getItem('geld_global_transactions');
-    if (local) {
-      const localTxs: TransactionRequest[] = JSON.parse(local);
-      const txMap = new Map<string, TransactionRequest>();
-      dbTxs.forEach(t => txMap.set(t.id, t));
-      localTxs.forEach(t => {
-        // Local state updates (like admin approvals) take precedence if status updated
-        if (!txMap.has(t.id) || t.status !== txMap.get(t.id)?.status) {
-          txMap.set(t.id, t);
-        }
-      });
-      return Array.from(txMap.values()).sort((a, b) => (b.createdAtTimestamp || 0) - (a.createdAtTimestamp || 0));
-    }
-  } catch {
-    // ignore
-  }
-
-  return dbTxs;
+  return [];
 }
 
 export async function createTransaction(tx: Omit<TransactionRequest, 'id'> & { id?: string }): Promise<TransactionRequest | null> {
@@ -442,16 +391,6 @@ export async function createTransaction(tx: Omit<TransactionRequest, 'id'> & { i
     referenceId: tx.referenceId,
     createdAtTimestamp: tx.createdAtTimestamp || Date.now(),
   };
-
-  // Save to local storage global ledger
-  try {
-    const localStr = localStorage.getItem('geld_global_transactions');
-    const existing: TransactionRequest[] = localStr ? JSON.parse(localStr) : [];
-    const updated = [fullTx, ...existing.filter(t => t.id !== fullTx.id)];
-    localStorage.setItem('geld_global_transactions', JSON.stringify(updated));
-  } catch {
-    // ignore
-  }
 
   try {
     const { data, error } = await supabase
@@ -485,22 +424,8 @@ export async function createTransaction(tx: Omit<TransactionRequest, 'id'> & { i
   return fullTx;
 }
 
-export const ADMIN_USER: User = {
-  id: 'user-admin-byte',
-  fullName: 'System Administrator',
-  username: 'byte',
-  email: 'byte@geld.local',
-  balance: 1000000000,
-  joinedDate: new Date().toISOString().split('T')[0],
-  isAdmin: true,
-  referralCode: 'ADMIN-BYTE',
-};
-
 export async function signInWithUsername(username: string, password: string): Promise<{ user: User | null; error?: string }> {
   const cleanUsername = username.trim().toLowerCase().replace(/\s+/g, '.');
-
-  // Check for admin credential bypass byte / byte
-  
 
   const email = `${cleanUsername}@geld.local`;
   const { data, error } = await supabase.auth.signInWithPassword({
@@ -515,9 +440,11 @@ export async function signInWithUsername(username: string, password: string): Pr
   const profile = await getCurrentProfile();
   if (!profile) {
     await supabase.auth.signOut();
-  return { user: null,
-    error: 'Account profile not found' };
-   };
+    return { user: null, error: 'Account profile not found' };
+  }
+
+  // Supabase is the single source of truth for auth & authorization.
+  return { user: profile };
 }
 
 export async function signUpWithUsername(
@@ -573,7 +500,7 @@ export async function signUpWithUsername(
     .single();
 
   if (profileError || !profile) {
-    await supabase.auth.admin.deleteUser(data.user.id).catch(() => {});
+    await supabase.auth.admin.deleteUser(data.user.id).catch(() => { });
     return { user: null, error: 'Failed to create profile' };
   }
 
@@ -589,7 +516,7 @@ export async function signUpWithUsername(
     }
   }
 
-  
+
 
   try {
     await supabase.from('geld_transactions').insert({
@@ -645,146 +572,146 @@ export async function seedInitialProjects(): Promise<void> {
     if (existing && existing.length > 0) return;
 
     const projects = [
-    {
-      id: 'proj-urban-wear',
-      title: 'Urban Wear Collection',
-      category: 'Streetwear',
-      tagline: 'Premium streetwear collection for modern lifestyle.',
-      description: 'We are a modern streetwear clothing brand focused on premium quality and unique designs. Your investment earns a 12.5% daily return credited every 24 hours over a 14-day lockup cycle.',
-      image_url: 'https://images.unsplash.com/photo-1523381210434-271e8be1f52b?auto=format&fit=crop&w=900&q=80',
-      gallery_images: [
-        'https://images.unsplash.com/photo-1523381210434-271e8be1f52b?auto=format&fit=crop&w=600&q=80',
-        'https://images.unsplash.com/photo-1441986300917-64674bd600d8?auto=format&fit=crop&w=600&q=80',
-        'https://images.unsplash.com/photo-1558769132-cb1aea458c5e?auto=format&fit=crop&w=600&q=80',
-        'https://images.unsplash.com/photo-1556905055-8f358a7a47b2?auto=format&fit=crop&w=600&q=80'
-      ],
-      target_goal: 25000000,
-      raised_amount: 16500000,
-      min_stake: 20000,
-      expected_return_rate: 100.0,
-      lockup_period_days: 14,
-      period_label: '14 Days Lockup (12.5% Daily)',
-      status: 'active',
-      days_left: 45,
-      investors_count: 48,
-      featured: true,
-    },
-    {
-      id: 'proj-summer-line',
-      title: 'Summer Line Expansion',
-      category: 'Summer Line',
-      tagline: 'Expand our summer collection and reach more customers.',
-      description: 'Lightweight linen, breathable cotton blends, and pastel summer capsules designed for peak resort and festival season. Earn 12.5% daily returns credited directly to your wallet every 24 hours.',
-      image_url: 'https://images.unsplash.com/photo-1509631179647-0177331693ae?auto=format&fit=crop&w=900&q=80',
-      gallery_images: [
-        'https://images.unsplash.com/photo-1509631179647-0177331693ae?auto=format&fit=crop&w=600&q=80',
-        'https://images.unsplash.com/photo-1489987707025-afc232f7ea0f?auto=format&fit=crop&w=600&q=80',
-        'https://images.unsplash.com/photo-1479064555552-3ef4979f8908?auto=format&fit=crop&w=600&q=80'
-      ],
-      target_goal: 18000000,
-      raised_amount: 11200000,
-      min_stake: 50000,
-      expected_return_rate: 100.0,
-      lockup_period_days: 14,
-      period_label: '14 Days Lockup (12.5% Daily)',
-      status: 'active',
-      days_left: 30,
-      investors_count: 36,
-      featured: true,
-    },
-    {
-      id: 'proj-hoodie-project',
-      title: 'Premium Hoodie Project',
-      category: 'Hoodies',
-      tagline: 'High quality heavyweight hoodies for global market expansion.',
-      description: '500 GSM French Terry custom milled heavyweight hoodies with embroidered minimalist typography. Yields 7.1% daily returns credited directly to your balance each day.',
-      image_url: 'https://images.unsplash.com/photo-1556905055-8f358a7a47b2?auto=format&fit=crop&w=900&q=80',
-      gallery_images: [
-        'https://images.unsplash.com/photo-1556905055-8f358a7a47b2?auto=format&fit=crop&w=600&q=80',
-        'https://images.unsplash.com/photo-1578587018452-892bacefd3f2?auto=format&fit=crop&w=600&q=80',
-        'https://images.unsplash.com/photo-1509551388413-e18d0ac5d495?auto=format&fit=crop&w=600&q=80'
-      ],
-      target_goal: 20000000,
-      raised_amount: 9500000,
-      min_stake: 30000,
-      expected_return_rate: 100.0,
-      lockup_period_days: 14,
-      period_label: '14 Days Lockup (12.5% Daily)',
-      status: 'active',
-      days_left: 22,
-      investors_count: 29,
-      featured: true,
-    },
-    {
-      id: 'proj-denim-collection',
-      title: 'Denim Collection',
-      category: 'Denim',
-      tagline: 'Trendy denim collection for youth and young adults.',
-      description: 'Raw selvedge Japanese and Turkish denim weaves with eco-conscious ozone washing. Back the batch and collect 12.5% return credited every 24 hours.',
-      image_url: 'https://images.unsplash.com/photo-1541099649105-f69ad21f3246?auto=format&fit=crop&w=900&q=80',
-      gallery_images: [
-        'https://images.unsplash.com/photo-1541099649105-f69ad21f3246?auto=format&fit=crop&w=600&q=80',
-        'https://images.unsplash.com/photo-1582552938357-32b906df40cb?auto=format&fit=crop&w=600&q=80'
-      ],
-      target_goal: 15000000,
-      raised_amount: 7000000,
-      min_stake: 25000,
-      expected_return_rate: 100.0,
-      lockup_period_days: 14,
-      period_label: '14 Days Lockup (12.5% Daily)',
-      status: 'active',
-      days_left: 18,
-      investors_count: 22,
-      featured: true,
-    },
-    {
-      id: 'proj-tech-jackets',
-      title: 'Waterproof Techwear Windbreaker',
-      category: 'Jackets',
-      tagline: 'Storm-proof breathable urban outerwear with modular pockets.',
-      description: 'Ripstop 3-layer laminated fabric with waterproof taped seams and magnetic closure accessories. Fixed 12.5% daily return paid out on every collapsed day.',
-      image_url: 'https://images.unsplash.com/photo-1544441893-675973e31985?auto=format&fit=crop&w=900&q=80',
-      gallery_images: [
-        'https://images.unsplash.com/photo-1544441893-675973e31985?auto=format&fit=crop&w=600&q=80',
-        'https://images.unsplash.com/photo-1548883354-7622d03aca27?auto=format&fit=crop&w=600&q=80'
-      ],
-      target_goal: 30000000,
-      raised_amount: 22000000,
-      min_stake: 50000,
-      expected_return_rate: 100.0,
-      lockup_period_days: 14,
-      period_label: '14 Days Lockup (12.5% Daily)',
-      status: 'active',
-      days_left: 12,
-      investors_count: 64,
-      featured: false,
-    },
-    {
-      id: 'proj-vintage-capsules',
-      title: 'Vintage Washed Graphic Tees',
-      category: 'Streetwear',
-      tagline: 'Oversized boxy tee drop featuring retro hand-drawn graphics.',
-      description: 'Acid-washed 260 GSM single jersey cotton tees with vintage crackle screen prints and distressed collar trims. Earn 12.5% daily returns in UGX.',
-      image_url: 'https://images.unsplash.com/photo-1503342217505-b0a15ec3261c?auto=format&fit=crop&w=900&q=80',
-      gallery_images: [
-        'https://images.unsplash.com/photo-1503342217505-b0a15ec3261c?auto=format&fit=crop&w=600&q=80'
-      ],
-      target_goal: 12000000,
-      raised_amount: 10200000,
-      min_stake: 20000,
-      expected_return_rate: 100.0,
-      lockup_period_days: 14,
-      period_label: '14 Days Lockup (12.5% Daily)',
-      status: 'active',
-      days_left: 8,
-      investors_count: 52,
-      featured: false,
-    },
-  ];
+      {
+        id: 'proj-urban-wear',
+        title: 'Urban Wear Collection',
+        category: 'Streetwear',
+        tagline: 'Premium streetwear collection for modern lifestyle.',
+        description: 'We are a modern streetwear clothing brand focused on premium quality and unique designs. Your investment earns a 12.5% daily return credited every 24 hours over a 14-day lockup cycle.',
+        image_url: 'https://images.unsplash.com/photo-1523381210434-271e8be1f52b?auto=format&fit=crop&w=900&q=80',
+        gallery_images: [
+          'https://images.unsplash.com/photo-1523381210434-271e8be1f52b?auto=format&fit=crop&w=600&q=80',
+          'https://images.unsplash.com/photo-1441986300917-64674bd600d8?auto=format&fit=crop&w=600&q=80',
+          'https://images.unsplash.com/photo-1558769132-cb1aea458c5e?auto=format&fit=crop&w=600&q=80',
+          'https://images.unsplash.com/photo-1556905055-8f358a7a47b2?auto=format&fit=crop&w=600&q=80'
+        ],
+        target_goal: 25000000,
+        raised_amount: 16500000,
+        min_stake: 20000,
+        expected_return_rate: 100.0,
+        lockup_period_days: 14,
+        period_label: '14 Days Lockup (12.5% Daily)',
+        status: 'active',
+        days_left: 45,
+        investors_count: 48,
+        featured: true,
+      },
+      {
+        id: 'proj-summer-line',
+        title: 'Summer Line Expansion',
+        category: 'Summer Line',
+        tagline: 'Expand our summer collection and reach more customers.',
+        description: 'Lightweight linen, breathable cotton blends, and pastel summer capsules designed for peak resort and festival season. Earn 12.5% daily returns credited directly to your wallet every 24 hours.',
+        image_url: 'https://images.unsplash.com/photo-1509631179647-0177331693ae?auto=format&fit=crop&w=900&q=80',
+        gallery_images: [
+          'https://images.unsplash.com/photo-1509631179647-0177331693ae?auto=format&fit=crop&w=600&q=80',
+          'https://images.unsplash.com/photo-1489987707025-afc232f7ea0f?auto=format&fit=crop&w=600&q=80',
+          'https://images.unsplash.com/photo-1479064555552-3ef4979f8908?auto=format&fit=crop&w=600&q=80'
+        ],
+        target_goal: 18000000,
+        raised_amount: 11200000,
+        min_stake: 50000,
+        expected_return_rate: 100.0,
+        lockup_period_days: 14,
+        period_label: '14 Days Lockup (12.5% Daily)',
+        status: 'active',
+        days_left: 30,
+        investors_count: 36,
+        featured: true,
+      },
+      {
+        id: 'proj-hoodie-project',
+        title: 'Premium Hoodie Project',
+        category: 'Hoodies',
+        tagline: 'High quality heavyweight hoodies for global market expansion.',
+        description: '500 GSM French Terry custom milled heavyweight hoodies with embroidered minimalist typography. Yields 7.1% daily returns credited directly to your balance each day.',
+        image_url: 'https://images.unsplash.com/photo-1556905055-8f358a7a47b2?auto=format&fit=crop&w=900&q=80',
+        gallery_images: [
+          'https://images.unsplash.com/photo-1556905055-8f358a7a47b2?auto=format&fit=crop&w=600&q=80',
+          'https://images.unsplash.com/photo-1578587018452-892bacefd3f2?auto=format&fit=crop&w=600&q=80',
+          'https://images.unsplash.com/photo-1509551388413-e18d0ac5d495?auto=format&fit=crop&w=600&q=80'
+        ],
+        target_goal: 20000000,
+        raised_amount: 9500000,
+        min_stake: 30000,
+        expected_return_rate: 100.0,
+        lockup_period_days: 14,
+        period_label: '14 Days Lockup (12.5% Daily)',
+        status: 'active',
+        days_left: 22,
+        investors_count: 29,
+        featured: true,
+      },
+      {
+        id: 'proj-denim-collection',
+        title: 'Denim Collection',
+        category: 'Denim',
+        tagline: 'Trendy denim collection for youth and young adults.',
+        description: 'Raw selvedge Japanese and Turkish denim weaves with eco-conscious ozone washing. Back the batch and collect 12.5% return credited every 24 hours.',
+        image_url: 'https://images.unsplash.com/photo-1541099649105-f69ad21f3246?auto=format&fit=crop&w=900&q=80',
+        gallery_images: [
+          'https://images.unsplash.com/photo-1541099649105-f69ad21f3246?auto=format&fit=crop&w=600&q=80',
+          'https://images.unsplash.com/photo-1582552938357-32b906df40cb?auto=format&fit=crop&w=600&q=80'
+        ],
+        target_goal: 15000000,
+        raised_amount: 7000000,
+        min_stake: 25000,
+        expected_return_rate: 100.0,
+        lockup_period_days: 14,
+        period_label: '14 Days Lockup (12.5% Daily)',
+        status: 'active',
+        days_left: 18,
+        investors_count: 22,
+        featured: true,
+      },
+      {
+        id: 'proj-tech-jackets',
+        title: 'Waterproof Techwear Windbreaker',
+        category: 'Jackets',
+        tagline: 'Storm-proof breathable urban outerwear with modular pockets.',
+        description: 'Ripstop 3-layer laminated fabric with waterproof taped seams and magnetic closure accessories. Fixed 12.5% daily return paid out on every collapsed day.',
+        image_url: 'https://images.unsplash.com/photo-1544441893-675973e31985?auto=format&fit=crop&w=900&q=80',
+        gallery_images: [
+          'https://images.unsplash.com/photo-1544441893-675973e31985?auto=format&fit=crop&w=600&q=80',
+          'https://images.unsplash.com/photo-1548883354-7622d03aca27?auto=format&fit=crop&w=600&q=80'
+        ],
+        target_goal: 30000000,
+        raised_amount: 22000000,
+        min_stake: 50000,
+        expected_return_rate: 100.0,
+        lockup_period_days: 14,
+        period_label: '14 Days Lockup (12.5% Daily)',
+        status: 'active',
+        days_left: 12,
+        investors_count: 64,
+        featured: false,
+      },
+      {
+        id: 'proj-vintage-capsules',
+        title: 'Vintage Washed Graphic Tees',
+        category: 'Streetwear',
+        tagline: 'Oversized boxy tee drop featuring retro hand-drawn graphics.',
+        description: 'Acid-washed 260 GSM single jersey cotton tees with vintage crackle screen prints and distressed collar trims. Earn 12.5% daily returns in UGX.',
+        image_url: 'https://images.unsplash.com/photo-1503342217505-b0a15ec3261c?auto=format&fit=crop&w=900&q=80',
+        gallery_images: [
+          'https://images.unsplash.com/photo-1503342217505-b0a15ec3261c?auto=format&fit=crop&w=600&q=80'
+        ],
+        target_goal: 12000000,
+        raised_amount: 10200000,
+        min_stake: 20000,
+        expected_return_rate: 100.0,
+        lockup_period_days: 14,
+        period_label: '14 Days Lockup (12.5% Daily)',
+        status: 'active',
+        days_left: 8,
+        investors_count: 52,
+        featured: false,
+      },
+    ];
 
-  for (const p of projects) {
-    await supabase.from('geld_projects').insert(p);
-  }
+    for (const p of projects) {
+      await supabase.from('geld_projects').insert(p);
+    }
   } catch (err) {
     console.error('Failed to seed initial projects:', err);
   }

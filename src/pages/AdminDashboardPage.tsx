@@ -62,7 +62,7 @@ export const AdminDashboardPage: React.FC = () => {
     }
   };
 
-  const isAdminActive = currentUser?.isAdmin || localStorage.getItem('geld_admin_session') === 'true';
+  const isAdminActive = !!currentUser?.isAdmin;
 
   if (!isAdminActive) {
     return (

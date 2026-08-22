@@ -30,6 +30,7 @@ import {
   getAllProfiles,
   getAllProjects,
   createProject,
+  updateExistingProject,
   getUserInvestments,
   saveUserInvestments,
   getAllInvestments,
@@ -92,6 +93,7 @@ interface AppContextType {
   approveTransaction: (transactionId: string) => Promise<void>;
   rejectTransaction: (transactionId: string, reason?: string) => Promise<void>;
   createClothingProject: (projectData: Omit<ClothingProject, 'id' | 'raisedAmount' | 'investorsCount' | 'status'>) => Promise<void>;
+  updateClothingProject: (project: ClothingProject) => Promise<boolean>;
   updateUserBalanceDirect: (userId: string, newBalance: number) => Promise<void>;
 
   claimDailyReward: () => Promise<{ success: boolean; error?: string; newBalance?: number }>;
@@ -208,15 +210,12 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       setUsers(allProfiles);
 
 
-      const { data: { session } } = await supabase.auth.getSession();
-        if (session?.user) {
-          const profile = allProfiles.find(p => p.id === session.user.id) || null;
-          setCurrentUser(profile);
-          if (profile) {
-            const userInvestments = await getUserInvestments(profile.id);
-            setInvestments(userInvestments);
-          }
-        }
+      const profile = await getCurrentProfile();
+      if (profile) {
+        setCurrentUser(profile);
+        const userInvestments = await getUserInvestments(profile.id);
+        setInvestments(userInvestments);
+      }
 
     } catch (err) {
       console.error('Failed to load data:', err);
@@ -240,13 +239,13 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       if (!mounted) return;
 
       if (event === 'SIGNED_IN' && session?.user) {
-        const [allProfiles, allTxs] = await Promise.all([
-          getAllProfiles(),
+        const [profile, allTxs, allProfiles] = await Promise.all([
+          getCurrentProfile(),
           getAllTransactions(),
+          getAllProfiles(),
         ]);
-        const profile = allProfiles.find(p => p.id === session.user.id) || null;
-        setCurrentUser(profile);
         if (profile) {
+          setCurrentUser(profile);
           const userInvestments = await getUserInvestments(profile.id);
           setInvestments(userInvestments);
           setTransactions(allTxs);
@@ -255,11 +254,11 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       } else if (event === 'SIGNED_OUT') {
         setCurrentUser(null);
         setInvestments([]);
-        setUsers([]);
       } else if (event === 'TOKEN_REFRESHED' && session?.user) {
-        const allProfiles = await getAllProfiles();
-        const profile = allProfiles.find(p => p.id === session.user.id) || null;
-        setCurrentUser(profile);
+        const profile = await getCurrentProfile();
+        if (profile) {
+          setCurrentUser(profile);
+        }
       }
     });
 
@@ -967,6 +966,31 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     }
   };
 
+  const updateClothingProject = async (updatedProject: ClothingProject): Promise<boolean> => {
+    try {
+      const saved = await updateExistingProject(updatedProject);
+      if (saved) {
+        setProjects(prev => prev.map(p => (p.id === saved.id ? saved : p)));
+        if (selectedProjectForInvest && selectedProjectForInvest.id === saved.id) {
+          setSelectedProjectForInvest(saved);
+        }
+        showToast(
+          'success',
+          'Project Updated! ✏️',
+          `"${saved.title}" has been successfully updated and is live across the platform.`
+        );
+        return true;
+      } else {
+        showToast('error', 'Update Failed', 'Could not save project modifications.');
+        return false;
+      }
+    } catch (err) {
+      console.error('Failed to update project:', err);
+      showToast('error', 'Update Error', 'An unexpected error occurred while updating the project.');
+      return false;
+    }
+  };
+
   return (
     <AppContext.Provider
       value={{
@@ -1005,6 +1029,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         approveTransaction,
         rejectTransaction,
         createClothingProject,
+        updateClothingProject,
         updateUserBalanceDirect,
         claimDailyReward,
         referralRewardAmount: REFERRAL_REWARD_UGX,

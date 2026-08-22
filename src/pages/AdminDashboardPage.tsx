@@ -16,7 +16,18 @@ import {
   X,
   Sparkles,
   FolderPlus,
-  Coins
+  Coins,
+  Pencil,
+  Sliders,
+  Eye,
+  RotateCcw,
+  Image as ImageIcon,
+  Save,
+  CheckCheck,
+  Tag,
+  DollarSign,
+  Calendar,
+  Layers as LayersIcon
 } from 'lucide-react';
 
 export const AdminDashboardPage: React.FC = () => {
@@ -30,7 +41,7 @@ export const AdminDashboardPage: React.FC = () => {
     users,
     projects,
     investments,
-    createClothingProject,
+    updateClothingProject,
     updateUserBalanceDirect,
     showToast,
     currentUser,
@@ -145,65 +156,140 @@ export const AdminDashboardPage: React.FC = () => {
     );
   }
 
-  // New Project Form state
-  const [newTitle, setNewTitle] = useState('');
-  const [newCategory, setNewCategory] = useState<'Streetwear' | 'Hoodies' | 'Denim' | 'Summer Line' | 'Jackets' | 'Accessories'>('Streetwear');
-  const [newTagline, setNewTagline] = useState('');
-  const [newDescription, setNewDescription] = useState('');
-  const [newImageUrl, setNewImageUrl] = useState('https://images.unsplash.com/photo-1544441893-675973e31985?auto=format&fit=crop&w=900&q=80');
-  const [newTargetGoal, setNewTargetGoal] = useState('20000000');
-  const [newMinStake, setNewMinStake] = useState('10000');
-  const [newReturnRate, setNewReturnRate] = useState('16.5');
-  const [newLockupDays, setNewLockupDays] = useState('14');
-  const [isCreatingProject, setIsCreatingProject] = useState(false);
+  // Selected Project to Edit & Form state
+  const [selectedProjectId, setSelectedProjectId] = useState<string>(() => projects[0]?.id || '');
+  const [editTitle, setEditTitle] = useState('');
+  const [editCategory, setEditCategory] = useState<ClothingProject['category']>('Streetwear');
+  const [editTagline, setEditTagline] = useState('');
+  const [editDescription, setEditDescription] = useState('');
+  const [editImageUrl, setEditImageUrl] = useState('');
+  const [editGalleryImagesText, setEditGalleryImagesText] = useState('');
+  const [editTargetGoal, setEditTargetGoal] = useState('20000000');
+  const [editRaisedAmount, setEditRaisedAmount] = useState('0');
+  const [editMinStake, setEditMinStake] = useState('10000');
+  const [editExpectedReturnRate, setEditExpectedReturnRate] = useState('50');
+  const [editReturnMultiplier, setEditReturnMultiplier] = useState('1.5');
+  const [editLockupPeriodDays, setEditLockupPeriodDays] = useState('14');
+  const [editPeriodLabel, setEditPeriodLabel] = useState('14 Days Lockup');
+  const [editStatus, setEditStatus] = useState<ClothingProject['status']>('active');
+  const [editDaysLeft, setEditDaysLeft] = useState('30');
+  const [editInvestorsCount, setEditInvestorsCount] = useState('0');
+  const [editFeatured, setEditFeatured] = useState(false);
+  const [isSavingProject, setIsSavingProject] = useState(false);
 
-  // Quick preset image URLs for convenience
+  // Quick preset image URLs for convenience when editing
   const imagePresets = [
     { label: 'Tech Jacket', url: 'https://images.unsplash.com/photo-1544441893-675973e31985?auto=format&fit=crop&w=900&q=80' },
     { label: 'Hoodie Drop', url: 'https://images.unsplash.com/photo-1556905055-8f358a7a47b2?auto=format&fit=crop&w=900&q=80' },
     { label: 'Denim Batch', url: 'https://images.unsplash.com/photo-1541099649105-f69ad21f3246?auto=format&fit=crop&w=900&q=80' },
     { label: 'Graphic Tees', url: 'https://images.unsplash.com/photo-1503342217505-b0a15ec3261c?auto=format&fit=crop&w=900&q=80' },
-    { label: 'Summer Linen', url: 'https://images.unsplash.com/photo-1509631179647-0177331693ae?auto=format&fit=crop&w=900&q=80' }
+    { label: 'Summer Linen', url: 'https://images.unsplash.com/photo-1509631179647-0177331693ae?auto=format&fit=crop&w=900&q=80' },
+    { label: 'Urban Coat', url: 'https://images.unsplash.com/photo-1512436991641-6745cdb1723f?auto=format&fit=crop&w=900&q=80' }
   ];
+
+  const populateFormWithProject = (proj: ClothingProject) => {
+    setSelectedProjectId(proj.id);
+    setEditTitle(proj.title || '');
+    setEditCategory(proj.category || 'Streetwear');
+    setEditTagline(proj.tagline || '');
+    setEditDescription(proj.description || '');
+    setEditImageUrl(proj.imageUrl || '');
+    const gallery = proj.galleryImages && proj.galleryImages.length > 0 ? proj.galleryImages : [proj.imageUrl || ''];
+    setEditGalleryImagesText(gallery.join('\n'));
+    setEditTargetGoal(String(proj.targetGoal || 20000000));
+    setEditRaisedAmount(String(proj.raisedAmount || 0));
+    setEditMinStake(String(proj.minStake || 10000));
+    setEditExpectedReturnRate(String(proj.expectedReturnRate || 50));
+    setEditReturnMultiplier(proj.returnMultiplier ? String(proj.returnMultiplier) : '1.5');
+    setEditLockupPeriodDays(String(proj.lockupPeriodDays || 14));
+    setEditPeriodLabel(proj.periodLabel || `${proj.lockupPeriodDays || 14} Days Lockup`);
+    setEditStatus(proj.status || 'active');
+    setEditDaysLeft(String(proj.daysLeft || 30));
+    setEditInvestorsCount(String(proj.investorsCount || 0));
+    setEditFeatured(Boolean(proj.featured));
+  };
+
+  // Sync form when projects change or on mount
+  useEffect(() => {
+    if (projects.length > 0) {
+      const current = projects.find(p => p.id === selectedProjectId);
+      if (current) {
+        if (!editTitle) {
+          populateFormWithProject(current);
+        }
+      } else {
+        populateFormWithProject(projects[0]);
+      }
+    }
+  }, [projects, selectedProjectId]);
+
+  const handleSelectProjectToEdit = (projectId: string) => {
+    const proj = projects.find(p => p.id === projectId);
+    if (proj) {
+      populateFormWithProject(proj);
+    }
+  };
+
+  const handleResetForm = () => {
+    const proj = projects.find(p => p.id === selectedProjectId);
+    if (proj) {
+      populateFormWithProject(proj);
+      showToast('info', 'Form Reset', 'Reverted form back to current saved project state.');
+    }
+  };
 
   const pendingTransactions = transactions.filter(t => t.status === 'pending');
   const totalInvestedGlobal = investments.reduce((acc, i) => acc + i.amountInvested, 0) + 145000000;
   const totalReturnsPaidGlobal = 22400000 + investments.filter(i => i.status === 'completed').reduce((acc, i) => acc + i.expectedReturnAmount, 0);
 
-  const handleCreateProjectSubmit = (e: React.FormEvent) => {
+  const handleSaveProjectSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newTitle.trim()) {
+    if (!editTitle.trim()) {
       showToast('error', 'Title Required', 'Please enter a project title.');
       return;
     }
 
-    setIsCreatingProject(true);
-    setTimeout(async () => {
-      await createClothingProject({
-        title: newTitle.trim(),
-        category: newCategory,
-        tagline: newTagline.trim() || `Exclusive ${newCategory} production release.`,
-        description: newDescription.trim() || `High quality ${newCategory} collection produced with premium materials and ethical manufacturing standards in Uganda.`,
-        imageUrl: newImageUrl,
-        galleryImages: [
-          newImageUrl,
-          'https://images.unsplash.com/photo-1523381210434-271e8be1f52b?auto=format&fit=crop&w=600&q=80',
-          'https://images.unsplash.com/photo-1441986300917-64674bd600d8?auto=format&fit=crop&w=600&q=80'
-        ],
-        targetGoal: parseFloat(newTargetGoal) || 20000000,
-        minStake: parseFloat(newMinStake) || 10000,
-        expectedReturnRate: parseFloat(newReturnRate) || 15.0,
-        lockupPeriodDays: parseInt(newLockupDays, 10) || 14,
-        periodLabel: `${newLockupDays || 14} Days Lockup`,
-        daysLeft: 30
-      });
+    const currentProject = projects.find(p => p.id === selectedProjectId);
+    if (!currentProject) {
+      showToast('error', 'Project Not Found', 'Could not find the project being edited.');
+      return;
+    }
 
-      setNewTitle('');
-      setNewTagline('');
-      setNewDescription('');
-      setIsCreatingProject(false);
-      setAdminTab('overview');
-    }, 400);
+    setIsSavingProject(true);
+    try {
+      const parsedGallery = editGalleryImagesText
+        .split('\n')
+        .map(url => url.trim())
+        .filter(url => url.length > 0);
+
+      const updatedProject: ClothingProject = {
+        id: selectedProjectId,
+        title: editTitle.trim(),
+        category: editCategory,
+        tagline: editTagline.trim(),
+        description: editDescription.trim(),
+        imageUrl: editImageUrl.trim() || currentProject.imageUrl,
+        galleryImages: parsedGallery.length > 0 ? parsedGallery : [editImageUrl.trim() || currentProject.imageUrl],
+        targetGoal: parseFloat(editTargetGoal) || 20000000,
+        raisedAmount: parseFloat(editRaisedAmount) || 0,
+        minStake: parseFloat(editMinStake) || 10000,
+        expectedReturnRate: parseFloat(editExpectedReturnRate) || 50,
+        returnMultiplier: editReturnMultiplier ? parseFloat(editReturnMultiplier) : undefined,
+        lockupPeriodDays: parseInt(editLockupPeriodDays, 10) || 14,
+        periodLabel: editPeriodLabel.trim() || `${editLockupPeriodDays || 14} Days Lockup`,
+        status: editStatus,
+        daysLeft: parseInt(editDaysLeft, 10) || 0,
+        investorsCount: parseInt(editInvestorsCount, 10) || 0,
+        featured: editFeatured,
+      };
+
+      const success = await updateClothingProject(updatedProject);
+      if (success) {
+        // Updated state will reflect across the site
+      }
+    } finally {
+      setIsSavingProject(false);
+    }
   };
 
   return (
@@ -276,15 +362,19 @@ export const AdminDashboardPage: React.FC = () => {
             </button>
 
             <button
+              id="admin-nav-edit-projects"
               onClick={() => setAdminTab('projects')}
-              className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl font-semibold text-xs transition cursor-pointer ${
+              className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl font-semibold text-xs transition cursor-pointer ${
                 adminTab === 'projects'
                   ? 'bg-emerald-600/30 text-emerald-300 border border-emerald-500/50'
                   : 'text-slate-400 hover:bg-slate-900 hover:text-white'
               }`}
             >
-              <FolderPlus className="w-4 h-4" />
-              <span>Create Clothing Drop</span>
+              <div className="flex items-center gap-3">
+                <Pencil className="w-4 h-4 text-emerald-400" />
+                <span>Edit Existing Projects</span>
+              </div>
+              <span className="text-slate-500 text-[10px] font-mono">{projects.length}</span>
             </button>
           </nav>
         </div>
@@ -542,12 +632,14 @@ export const AdminDashboardPage: React.FC = () => {
                 {/* Top Projects List */}
                 <div className="bg-slate-950 p-6 rounded-3xl border border-slate-800 space-y-4">
                   <div className="flex items-center justify-between">
-                    <h3 className="font-bold text-sm text-white">Live Platform Projects</h3>
+                    <h3 className="font-bold text-sm text-white">Live Platform Projects ({projects.length})</h3>
                     <button
+                      id="admin-overview-edit-projects-btn"
                       onClick={() => setAdminTab('projects')}
-                      className="text-xs text-violet-400 hover:underline font-bold cursor-pointer"
+                      className="text-xs text-violet-400 hover:text-violet-300 font-bold flex items-center gap-1 cursor-pointer transition"
                     >
-                      + Add Project
+                      <Pencil className="w-3.5 h-3.5" />
+                      <span>Edit Projects</span>
                     </button>
                   </div>
 
@@ -555,17 +647,33 @@ export const AdminDashboardPage: React.FC = () => {
                     {projects.map(proj => {
                       const pct = Math.min(100, Math.round((proj.raisedAmount / proj.targetGoal) * 100));
                       return (
-                        <div key={proj.id} className="flex items-center justify-between p-3 bg-slate-900 rounded-xl border border-slate-800">
+                        <div key={proj.id} className="flex items-center justify-between p-3 bg-slate-900 rounded-xl border border-slate-800 hover:border-slate-700 transition">
                           <div className="flex items-center gap-3">
                             <img src={proj.imageUrl} alt={proj.title} className="w-10 h-10 rounded-lg object-cover" />
                             <div>
                               <div className="font-bold text-xs text-white">{proj.title}</div>
-                              <div className="text-[10px] text-slate-400">{proj.category} • {proj.lockupPeriodDays}d lockup</div>
+                              <div className="text-[10px] text-slate-400">
+                                {proj.category} • Min: {formatUGX(proj.minStake)} • {proj.lockupPeriodDays}d ({proj.expectedReturnRate}% return)
+                              </div>
                             </div>
                           </div>
-                          <div className="text-right">
-                            <div className="font-bold text-xs text-white">{formatUGX(proj.raisedAmount)}</div>
-                            <div className="text-[10px] text-violet-400 font-semibold">{pct}% funded</div>
+                          <div className="flex items-center gap-3">
+                            <div className="text-right">
+                              <div className="font-bold text-xs text-white">{formatUGX(proj.raisedAmount)}</div>
+                              <div className="text-[10px] text-emerald-400 font-semibold">{pct}% funded</div>
+                            </div>
+                            <button
+                              id={`admin-edit-project-btn-${proj.id}`}
+                              onClick={() => {
+                                handleSelectProjectToEdit(proj.id);
+                                setAdminTab('projects');
+                              }}
+                              className="px-2.5 py-1.5 bg-emerald-600/20 hover:bg-emerald-600 text-emerald-300 hover:text-white rounded-lg text-xs font-bold transition flex items-center gap-1 cursor-pointer border border-emerald-500/30"
+                              title="Edit this project"
+                            >
+                              <Pencil className="w-3 h-3" />
+                              <span>Edit</span>
+                            </button>
                           </div>
                         </div>
                       );
@@ -701,196 +809,630 @@ export const AdminDashboardPage: React.FC = () => {
             </div>
           )}
 
-          {/* CREATE PROJECT FORM SUB-TAB */}
+          {/* EDIT EXISTING PROJECTS TAB */}
           {adminTab === 'projects' && (
-            <div className="bg-slate-950 p-6 lg:p-8 rounded-3xl border border-slate-800 space-y-6">
-              <div className="flex items-center gap-3 pb-4 border-b border-slate-800">
-                <div className="w-10 h-10 rounded-xl bg-emerald-600/30 border border-emerald-500/40 flex items-center justify-center text-emerald-400">
-                  <PlusCircle className="w-6 h-6" />
+            <div className="space-y-6">
+              {/* Header */}
+              <div className="bg-slate-950 p-6 lg:p-8 rounded-3xl border border-slate-800 space-y-6">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-5 border-b border-slate-800">
+                  <div className="flex items-center gap-3.5">
+                    <div className="w-12 h-12 rounded-2xl bg-emerald-600/20 border border-emerald-500/40 flex items-center justify-center text-emerald-400 shrink-0">
+                      <Pencil className="w-6 h-6" />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <h2 className="text-xl font-black text-white tracking-tight">Edit Existing Projects</h2>
+                        <span className="text-[11px] font-extrabold uppercase px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                          {projects.length} Total Drops
+                        </span>
+                      </div>
+                      <p className="text-xs text-slate-400 mt-0.5">
+                        Select any existing clothing drop to modify its title, minimum stake, return rate, funding goals, images, lockup duration, and live status.
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Top action: Jump to live user app preview */}
+                  <button
+                    onClick={() => setCurrentView('landing')}
+                    className="flex items-center gap-2 px-4 py-2 bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white rounded-xl text-xs font-bold border border-slate-700 transition cursor-pointer self-start sm:self-auto"
+                  >
+                    <Eye className="w-4 h-4 text-violet-400" />
+                    <span>View Live Site</span>
+                  </button>
                 </div>
-                <div>
-                  <h2 className="text-lg font-bold text-white">Create & List New Clothing Drop</h2>
-                  <p className="text-xs text-slate-400">
-                    Publish brand-new clothing investment projects directly onto the live ThreadInvest platform in UGX.
-                  </p>
+
+                {/* Project Selector Bar */}
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-bold uppercase tracking-wider text-slate-300 flex items-center gap-1.5">
+                      <Sliders className="w-4 h-4 text-emerald-400" />
+                      <span>Select Project to Edit</span>
+                    </label>
+                    <span className="text-[11px] text-slate-400">
+                      Editing: <span className="text-emerald-400 font-bold">{projects.find(p => p.id === selectedProjectId)?.title || 'None'}</span>
+                    </span>
+                  </div>
+
+                  {/* Dropdown Selector */}
+                  <div className="relative">
+                    <select
+                      id="admin-project-selector-dropdown"
+                      value={selectedProjectId}
+                      onChange={e => handleSelectProjectToEdit(e.target.value)}
+                      className="w-full px-4 py-3 bg-slate-900 border border-slate-800 rounded-2xl text-xs font-bold text-white focus:outline-none focus:ring-2 focus:ring-emerald-500 cursor-pointer"
+                    >
+                      {projects.map(proj => (
+                        <option key={proj.id} value={proj.id}>
+                          {proj.title} — [{proj.category}] • Min: {formatUGX(proj.minStake)} • {proj.expectedReturnRate}% return ({proj.status})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Quick Card Pickers */}
+                  <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5 pt-1">
+                    {projects.map(proj => {
+                      const isSelected = proj.id === selectedProjectId;
+                      return (
+                        <button
+                          key={proj.id}
+                          type="button"
+                          onClick={() => handleSelectProjectToEdit(proj.id)}
+                          className={`p-2.5 rounded-xl border text-left transition cursor-pointer flex flex-col justify-between gap-2 ${
+                            isSelected
+                              ? 'bg-emerald-950/40 border-emerald-500 shadow-md shadow-emerald-950/50 ring-1 ring-emerald-500'
+                              : 'bg-slate-900 border-slate-800 hover:border-slate-700 opacity-75 hover:opacity-100'
+                          }`}
+                        >
+                          <div className="flex items-center gap-2">
+                            <img
+                              src={proj.imageUrl}
+                              alt={proj.title}
+                              className="w-8 h-8 rounded-lg object-cover shrink-0"
+                            />
+                            <div className="min-w-0">
+                              <div className="font-bold text-[11px] text-white truncate">{proj.title}</div>
+                              <div className="text-[9px] text-slate-400">{proj.category}</div>
+                            </div>
+                          </div>
+                          <div className="flex items-center justify-between text-[10px] pt-1 border-t border-slate-800/80">
+                            <span className="font-mono text-emerald-400">{formatUGXCompact(proj.minStake)} min</span>
+                            <span className={`px-1.5 py-0.2 rounded text-[9px] font-black uppercase ${
+                              proj.status === 'active' ? 'bg-emerald-500/20 text-emerald-300' : 'bg-slate-800 text-slate-400'
+                            }`}>
+                              {proj.status}
+                            </span>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
               </div>
 
-              <form onSubmit={handleCreateProjectSubmit} className="space-y-6">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-                  {/* Title */}
-                  <div>
-                    <label className="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-1.5">
-                      Project Title *
-                    </label>
-                    <input
-                      id="admin-new-project-title"
-                      type="text"
-                      value={newTitle}
-                      onChange={e => setNewTitle(e.target.value)}
-                      required
-                      placeholder="e.g. Acid-Wash Vintage Denim Jacket"
-                      className="w-full px-4 py-2.5 bg-slate-900 border border-slate-800 rounded-xl text-xs font-semibold text-white focus:outline-none focus:ring-2 focus:ring-violet-500"
-                    />
-                  </div>
-
-                  {/* Category */}
-                  <div>
-                    <label className="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-1.5">
-                      Category *
-                    </label>
-                    <select
-                      value={newCategory}
-                      onChange={e => setNewCategory(e.target.value as any)}
-                      className="w-full px-4 py-2.5 bg-slate-900 border border-slate-800 rounded-xl text-xs font-semibold text-white focus:outline-none focus:ring-2 focus:ring-violet-500"
+              {/* Main Editing Area & Live Preview */}
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                {/* Edit Form (8 cols on large screens) */}
+                <div className="lg:col-span-7 xl:col-span-8 bg-slate-950 p-6 lg:p-8 rounded-3xl border border-slate-800 space-y-6">
+                  <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+                    <div className="flex items-center gap-2">
+                      <Pencil className="w-4 h-4 text-emerald-400" />
+                      <h3 className="text-sm font-black uppercase tracking-wider text-white">
+                        Modify Project Parameters
+                      </h3>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleResetForm}
+                      className="text-xs text-slate-400 hover:text-white flex items-center gap-1.5 font-bold cursor-pointer transition"
+                      title="Reset form to saved project values"
                     >
-                      <option value="Streetwear">Streetwear</option>
-                      <option value="Hoodies">Hoodies</option>
-                      <option value="Denim">Denim</option>
-                      <option value="Jackets">Jackets</option>
-                      <option value="Summer Line">Summer Line</option>
-                      <option value="Accessories">Accessories</option>
-                    </select>
-                  </div>
-                </div>
-
-                {/* Tagline & Description */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-                  <div>
-                    <label className="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-1.5">
-                      Tagline / Short Summary
-                    </label>
-                    <input
-                      type="text"
-                      value={newTagline}
-                      onChange={e => setNewTagline(e.target.value)}
-                      placeholder="e.g. Premium oversized cuts for Kampala fashion week"
-                      className="w-full px-4 py-2.5 bg-slate-900 border border-slate-800 rounded-xl text-xs font-semibold text-white focus:outline-none focus:ring-2 focus:ring-violet-500"
-                    />
+                      <RotateCcw className="w-3.5 h-3.5" />
+                      <span>Reset Changes</span>
+                    </button>
                   </div>
 
-                  <div>
-                    <label className="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-1.5">
-                      Target Funding Goal (UGX)
-                    </label>
-                    <input
-                      type="number"
-                      value={newTargetGoal}
-                      onChange={e => setNewTargetGoal(e.target.value)}
-                      placeholder="20000000"
-                      className="w-full px-4 py-2.5 bg-slate-900 border border-slate-800 rounded-xl text-xs font-semibold text-white focus:outline-none focus:ring-2 focus:ring-violet-500"
-                    />
-                  </div>
-                </div>
+                  <form onSubmit={handleSaveProjectSubmit} className="space-y-6">
+                    {/* SECTION 1: Identity & Categorization */}
+                    <div className="space-y-4">
+                      <div className="text-[11px] font-black uppercase tracking-widest text-slate-400 flex items-center gap-1.5">
+                        <Tag className="w-3.5 h-3.5 text-emerald-400" />
+                        <span>1. Project Identity & Classification</span>
+                      </div>
 
-                {/* Rates & Terms */}
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                  <div>
-                    <label className="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-1.5">
-                      Minimum Stake (UGX)
-                    </label>
-                    <input
-                      type="number"
-                      value={newMinStake}
-                      onChange={e => setNewMinStake(e.target.value)}
-                      placeholder="20000"
-                      className="w-full px-4 py-2.5 bg-slate-900 border border-slate-800 rounded-xl text-xs font-semibold text-white focus:outline-none focus:ring-2 focus:ring-violet-500"
-                    />
-                  </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        {/* Title */}
+                        <div>
+                          <label className="block text-xs font-bold text-slate-300 mb-1.5">
+                            Project Title / Name *
+                          </label>
+                          <input
+                            id="admin-edit-project-title"
+                            type="text"
+                            value={editTitle}
+                            onChange={e => setEditTitle(e.target.value)}
+                            required
+                            placeholder="e.g. Acid-Wash Vintage Denim Jacket"
+                            className="w-full px-4 py-2.5 bg-slate-900 border border-slate-800 rounded-xl text-xs font-bold text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                          />
+                        </div>
 
-                  <div>
-                    <label className="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-1.5">
-                      Expected Return Rate (%)
-                    </label>
-                    <input
-                      type="number"
-                      step="0.5"
-                      value={newReturnRate}
-                      onChange={e => setNewReturnRate(e.target.value)}
-                      placeholder="16.5"
-                      className="w-full px-4 py-2.5 bg-slate-900 border border-slate-800 rounded-xl text-xs font-semibold text-white focus:outline-none focus:ring-2 focus:ring-violet-500"
-                    />
-                  </div>
+                        {/* Category */}
+                        <div>
+                          <label className="block text-xs font-bold text-slate-300 mb-1.5">
+                            Category *
+                          </label>
+                          <select
+                            id="admin-edit-project-category"
+                            value={editCategory}
+                            onChange={e => setEditCategory(e.target.value as any)}
+                            className="w-full px-4 py-2.5 bg-slate-900 border border-slate-800 rounded-xl text-xs font-bold text-white focus:outline-none focus:ring-2 focus:ring-emerald-500 cursor-pointer"
+                          >
+                            <option value="Streetwear">Streetwear</option>
+                            <option value="Hoodies">Hoodies</option>
+                            <option value="Denim">Denim</option>
+                            <option value="Jackets">Jackets</option>
+                            <option value="Summer Line">Summer Line</option>
+                            <option value="Accessories">Accessories</option>
+                          </select>
+                        </div>
+                      </div>
 
-                  <div>
-                    <label className="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-1.5">
-                      Lockup Duration (Days)
-                    </label>
-                    <input
-                      type="number"
-                      value={newLockupDays}
-                      onChange={e => setNewLockupDays(e.target.value)}
-                      placeholder="14"
-                      className="w-full px-4 py-2.5 bg-slate-900 border border-slate-800 rounded-xl text-xs font-semibold text-white focus:outline-none focus:ring-2 focus:ring-violet-500"
-                    />
-                  </div>
-                </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        {/* Tagline */}
+                        <div>
+                          <label className="block text-xs font-bold text-slate-300 mb-1.5">
+                            Tagline / Short Pitch
+                          </label>
+                          <input
+                            id="admin-edit-project-tagline"
+                            type="text"
+                            value={editTagline}
+                            onChange={e => setEditTagline(e.target.value)}
+                            placeholder="e.g. Premium oversized cuts for Kampala fashion week"
+                            className="w-full px-4 py-2.5 bg-slate-900 border border-slate-800 rounded-xl text-xs font-medium text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                          />
+                        </div>
 
-                {/* Image URL & Presets */}
-                <div>
-                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-1.5">
-                    Image URL (Streetwear or apparel collection)
-                  </label>
-                  <input
-                    type="url"
-                    value={newImageUrl}
-                    onChange={e => setNewImageUrl(e.target.value)}
-                    placeholder="https://images.unsplash.com/..."
-                    className="w-full px-4 py-2.5 bg-slate-900 border border-slate-800 rounded-xl text-xs font-mono text-white focus:outline-none focus:ring-2 focus:ring-violet-500 mb-2"
-                  />
+                        {/* Period Label */}
+                        <div>
+                          <label className="block text-xs font-bold text-slate-300 mb-1.5">
+                            Period Label / Tag
+                          </label>
+                          <input
+                            id="admin-edit-project-period-label"
+                            type="text"
+                            value={editPeriodLabel}
+                            onChange={e => setEditPeriodLabel(e.target.value)}
+                            placeholder="14 Days Lockup"
+                            className="w-full px-4 py-2.5 bg-slate-900 border border-slate-800 rounded-xl text-xs font-medium text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                          />
+                        </div>
+                      </div>
+                    </div>
 
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="text-[11px] text-slate-500">Quick Presets:</span>
-                    {imagePresets.map(preset => (
+                    {/* SECTION 2: Financial Terms & Stakes */}
+                    <div className="space-y-4 pt-4 border-t border-slate-800/80">
+                      <div className="text-[11px] font-black uppercase tracking-widest text-slate-400 flex items-center gap-1.5">
+                        <DollarSign className="w-3.5 h-3.5 text-emerald-400" />
+                        <span>2. Financial Terms, Minimum Stake & Yields</span>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                        {/* Minimum Stake */}
+                        <div>
+                          <label className="block text-xs font-bold text-slate-300 mb-1.5">
+                            Minimum Stake (UGX) *
+                          </label>
+                          <input
+                            id="admin-edit-project-min-stake"
+                            type="number"
+                            value={editMinStake}
+                            onChange={e => setEditMinStake(e.target.value)}
+                            required
+                            step="1000"
+                            placeholder="10000"
+                            className="w-full px-4 py-2.5 bg-slate-900 border border-slate-800 rounded-xl text-xs font-mono font-bold text-emerald-400 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                          />
+                        </div>
+
+                        {/* Expected Return Rate */}
+                        <div>
+                          <label className="block text-xs font-bold text-slate-300 mb-1.5">
+                            Expected Return Rate (%) *
+                          </label>
+                          <input
+                            id="admin-edit-project-return-rate"
+                            type="number"
+                            step="0.1"
+                            value={editExpectedReturnRate}
+                            onChange={e => setEditExpectedReturnRate(e.target.value)}
+                            required
+                            placeholder="50"
+                            className="w-full px-4 py-2.5 bg-slate-900 border border-slate-800 rounded-xl text-xs font-mono font-bold text-violet-400 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                          />
+                        </div>
+
+                        {/* Return Multiplier */}
+                        <div>
+                          <label className="block text-xs font-bold text-slate-300 mb-1.5">
+                            Return Multiplier (e.g. 1.5)
+                          </label>
+                          <input
+                            id="admin-edit-project-return-multiplier"
+                            type="number"
+                            step="0.05"
+                            value={editReturnMultiplier}
+                            onChange={e => setEditReturnMultiplier(e.target.value)}
+                            placeholder="1.5"
+                            className="w-full px-4 py-2.5 bg-slate-900 border border-slate-800 rounded-xl text-xs font-mono font-bold text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        {/* Target Funding Goal */}
+                        <div>
+                          <label className="block text-xs font-bold text-slate-300 mb-1.5">
+                            Target Funding Goal (UGX) *
+                          </label>
+                          <input
+                            id="admin-edit-project-target-goal"
+                            type="number"
+                            value={editTargetGoal}
+                            onChange={e => setEditTargetGoal(e.target.value)}
+                            required
+                            step="100000"
+                            placeholder="20000000"
+                            className="w-full px-4 py-2.5 bg-slate-900 border border-slate-800 rounded-xl text-xs font-mono font-bold text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                          />
+                        </div>
+
+                        {/* Raised Amount */}
+                        <div>
+                          <label className="block text-xs font-bold text-slate-300 mb-1.5">
+                            Currently Raised (UGX)
+                          </label>
+                          <input
+                            id="admin-edit-project-raised-amount"
+                            type="number"
+                            value={editRaisedAmount}
+                            onChange={e => setEditRaisedAmount(e.target.value)}
+                            step="10000"
+                            placeholder="0"
+                            className="w-full px-4 py-2.5 bg-slate-900 border border-slate-800 rounded-xl text-xs font-mono font-bold text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* SECTION 3: Duration, Metrics & Status */}
+                    <div className="space-y-4 pt-4 border-t border-slate-800/80">
+                      <div className="text-[11px] font-black uppercase tracking-widest text-slate-400 flex items-center gap-1.5">
+                        <Calendar className="w-3.5 h-3.5 text-emerald-400" />
+                        <span>3. Lockup Duration, Metrics & Visibility Status</span>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                        {/* Lockup Duration */}
+                        <div>
+                          <label className="block text-xs font-bold text-slate-300 mb-1.5">
+                            Lockup Duration (Days) *
+                          </label>
+                          <input
+                            id="admin-edit-project-lockup-days"
+                            type="number"
+                            value={editLockupPeriodDays}
+                            onChange={e => setEditLockupPeriodDays(e.target.value)}
+                            required
+                            placeholder="14"
+                            className="w-full px-4 py-2.5 bg-slate-900 border border-slate-800 rounded-xl text-xs font-mono font-bold text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                          />
+                        </div>
+
+                        {/* Days Left */}
+                        <div>
+                          <label className="block text-xs font-bold text-slate-300 mb-1.5">
+                            Days Left / Remaining
+                          </label>
+                          <input
+                            id="admin-edit-project-days-left"
+                            type="number"
+                            value={editDaysLeft}
+                            onChange={e => setEditDaysLeft(e.target.value)}
+                            placeholder="30"
+                            className="w-full px-4 py-2.5 bg-slate-900 border border-slate-800 rounded-xl text-xs font-mono font-bold text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                          />
+                        </div>
+
+                        {/* Investors Count */}
+                        <div>
+                          <label className="block text-xs font-bold text-slate-300 mb-1.5">
+                            Investors / Backers Count
+                          </label>
+                          <input
+                            id="admin-edit-project-investors-count"
+                            type="number"
+                            value={editInvestorsCount}
+                            onChange={e => setEditInvestorsCount(e.target.value)}
+                            placeholder="0"
+                            className="w-full px-4 py-2.5 bg-slate-900 border border-slate-800 rounded-xl text-xs font-mono font-bold text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        {/* Status */}
+                        <div>
+                          <label className="block text-xs font-bold text-slate-300 mb-1.5">
+                            Project Lifecycle Status *
+                          </label>
+                          <select
+                            id="admin-edit-project-status"
+                            value={editStatus}
+                            onChange={e => setEditStatus(e.target.value as any)}
+                            className="w-full px-4 py-2.5 bg-slate-900 border border-slate-800 rounded-xl text-xs font-bold text-white focus:outline-none focus:ring-2 focus:ring-emerald-500 cursor-pointer"
+                          >
+                            <option value="active">Active (Accepting Investments)</option>
+                            <option value="funded">Funded (Goal Met / In Production)</option>
+                            <option value="closed">Closed / Completed</option>
+                          </select>
+                        </div>
+
+                        {/* Featured Toggle */}
+                        <div className="flex items-center justify-between p-3 bg-slate-900 rounded-xl border border-slate-800 mt-2 sm:mt-0">
+                          <div>
+                            <div className="text-xs font-bold text-white">Featured Project</div>
+                            <div className="text-[10px] text-slate-400">Show highlighted badge on showcase</div>
+                          </div>
+                          <input
+                            id="admin-edit-project-featured"
+                            type="checkbox"
+                            checked={editFeatured}
+                            onChange={e => setEditFeatured(e.target.checked)}
+                            className="w-5 h-5 accent-emerald-500 rounded cursor-pointer"
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* SECTION 4: Media & Image URLs */}
+                    <div className="space-y-4 pt-4 border-t border-slate-800/80">
+                      <div className="text-[11px] font-black uppercase tracking-widest text-slate-400 flex items-center gap-1.5">
+                        <ImageIcon className="w-3.5 h-3.5 text-emerald-400" />
+                        <span>4. Media, Cover Photo & Gallery Images</span>
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-bold text-slate-300 mb-1.5">
+                          Primary Cover Image URL *
+                        </label>
+                        <input
+                          id="admin-edit-project-image-url"
+                          type="url"
+                          value={editImageUrl}
+                          onChange={e => setEditImageUrl(e.target.value)}
+                          required
+                          placeholder="https://images.unsplash.com/..."
+                          className="w-full px-4 py-2.5 bg-slate-900 border border-slate-800 rounded-xl text-xs font-mono text-white focus:outline-none focus:ring-2 focus:ring-emerald-500 mb-2"
+                        />
+
+                        {/* Image Presets */}
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="text-[11px] text-slate-400 font-semibold">Quick Photo Presets:</span>
+                          {imagePresets.map(preset => (
+                            <button
+                              key={preset.label}
+                              type="button"
+                              onClick={() => setEditImageUrl(preset.url)}
+                              className={`text-[11px] px-2.5 py-1 rounded-lg border transition cursor-pointer ${
+                                editImageUrl === preset.url
+                                  ? 'bg-emerald-600 text-white border-emerald-500 font-bold'
+                                  : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-white'
+                              }`}
+                            >
+                              {preset.label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Gallery Images */}
+                      <div>
+                        <label className="block text-xs font-bold text-slate-300 mb-1">
+                          Gallery Images (One URL per line)
+                        </label>
+                        <textarea
+                          id="admin-edit-project-gallery"
+                          rows={2}
+                          value={editGalleryImagesText}
+                          onChange={e => setEditGalleryImagesText(e.target.value)}
+                          placeholder="https://images.unsplash.com/...&#10;https://images.unsplash.com/..."
+                          className="w-full px-4 py-2.5 bg-slate-900 border border-slate-800 rounded-xl text-xs font-mono text-slate-300 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                        />
+                      </div>
+                    </div>
+
+                    {/* SECTION 5: Description & Story */}
+                    <div className="space-y-4 pt-4 border-t border-slate-800/80">
+                      <div className="text-[11px] font-black uppercase tracking-widest text-slate-400 flex items-center gap-1.5">
+                        <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
+                        <span>5. Project Description & Brand Story</span>
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-bold text-slate-300 mb-1.5">
+                          Full Project Description
+                        </label>
+                        <textarea
+                          id="admin-edit-project-description"
+                          rows={4}
+                          value={editDescription}
+                          onChange={e => setEditDescription(e.target.value)}
+                          placeholder="Describe materials, production timeline, distribution, boutique expansion, and sales channels across Uganda..."
+                          className="w-full px-4 py-2.5 bg-slate-900 border border-slate-800 rounded-xl text-xs font-medium text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Submit and Save Actions */}
+                    <div className="pt-4 border-t border-slate-800 flex flex-col sm:flex-row items-center gap-3">
                       <button
-                        key={preset.label}
-                        type="button"
-                        onClick={() => setNewImageUrl(preset.url)}
-                        className={`text-[11px] px-2.5 py-1 rounded-lg border transition cursor-pointer ${
-                          newImageUrl === preset.url
-                            ? 'bg-violet-600 text-white border-violet-600'
-                            : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-white'
-                        }`}
+                        id="admin-save-project-btn"
+                        type="submit"
+                        disabled={isSavingProject}
+                        className="w-full sm:w-auto flex-1 py-3.5 px-6 bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 text-white font-black rounded-xl shadow-lg shadow-emerald-950/50 transition cursor-pointer text-sm disabled:opacity-50 flex items-center justify-center gap-2"
                       >
-                        {preset.label}
+                        {isSavingProject ? (
+                          <>
+                            <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                            <span>Saving Changes...</span>
+                          </>
+                        ) : (
+                          <>
+                            <Save className="w-4 h-4" />
+                            <span>Save Changes & Update Live Platform</span>
+                          </>
+                        )}
                       </button>
-                    ))}
+
+                      <button
+                        type="button"
+                        onClick={handleResetForm}
+                        disabled={isSavingProject}
+                        className="w-full sm:w-auto py-3.5 px-5 bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white rounded-xl text-xs font-bold border border-slate-800 transition cursor-pointer flex items-center justify-center gap-1.5"
+                      >
+                        <RotateCcw className="w-4 h-4" />
+                        <span>Revert</span>
+                      </button>
+                    </div>
+                  </form>
+                </div>
+
+                {/* Right Column: Live Card Preview (4 cols on large screens) */}
+                <div className="lg:col-span-5 xl:col-span-4 space-y-6">
+                  {/* Real-time Preview Container */}
+                  <div className="bg-slate-950 p-6 rounded-3xl border border-slate-800 space-y-4 sticky top-6">
+                    <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+                      <div className="flex items-center gap-2">
+                        <Eye className="w-4 h-4 text-emerald-400" />
+                        <h4 className="text-xs font-bold uppercase tracking-wider text-white">
+                          Live Platform Preview
+                        </h4>
+                      </div>
+                      <span className="text-[10px] text-emerald-400 font-mono font-bold">
+                        ID: {selectedProjectId}
+                      </span>
+                    </div>
+
+                    {/* Preview Project Card */}
+                    <div className="rounded-2xl border border-slate-800 bg-slate-900 overflow-hidden shadow-xl">
+                      {/* Image Preview */}
+                      <div className="relative aspect-video bg-slate-950">
+                        <img
+                          src={editImageUrl || 'https://images.unsplash.com/photo-1544441893-675973e31985?auto=format&fit=crop&w=900&q=80'}
+                          alt={editTitle || 'Drop Preview'}
+                          className="w-full h-full object-cover"
+                          onError={(e: any) => {
+                            e.target.src = 'https://images.unsplash.com/photo-1544441893-675973e31985?auto=format&fit=crop&w=900&q=80';
+                          }}
+                        />
+                        <div className="absolute top-3 left-3 flex gap-1.5">
+                          <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-full bg-slate-950/80 text-white backdrop-blur-xs border border-white/10">
+                            {editCategory}
+                          </span>
+                          {editFeatured && (
+                            <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-full bg-amber-500 text-slate-950">
+                              Featured
+                            </span>
+                          )}
+                        </div>
+                        <div className="absolute top-3 right-3">
+                          <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-full ${
+                            editStatus === 'active'
+                              ? 'bg-emerald-500 text-slate-950'
+                              : editStatus === 'funded'
+                              ? 'bg-violet-500 text-white'
+                              : 'bg-slate-700 text-slate-300'
+                          }`}>
+                            {editStatus}
+                          </span>
+                        </div>
+                        <div className="absolute bottom-3 right-3 bg-violet-600/90 backdrop-blur-xs text-white text-[11px] font-black px-2.5 py-1 rounded-lg">
+                          +{editExpectedReturnRate}% Return
+                        </div>
+                      </div>
+
+                      {/* Content Preview */}
+                      <div className="p-4 space-y-3">
+                        <div>
+                          <h4 className="font-black text-sm text-white leading-snug">
+                            {editTitle || 'Untitled Clothing Drop'}
+                          </h4>
+                          <p className="text-[11px] text-slate-400 line-clamp-2 mt-0.5">
+                            {editTagline || editDescription || 'No description provided yet.'}
+                          </p>
+                        </div>
+
+                        {/* Progress Bar */}
+                        <div className="space-y-1.5">
+                          {(() => {
+                            const goal = parseFloat(editTargetGoal) || 20000000;
+                            const raised = parseFloat(editRaisedAmount) || 0;
+                            const pct = Math.min(100, Math.round((raised / goal) * 100));
+                            return (
+                              <>
+                                <div className="flex justify-between text-[10px] font-bold">
+                                  <span className="text-slate-400">Raised: {formatUGX(raised)}</span>
+                                  <span className="text-emerald-400">{pct}%</span>
+                                </div>
+                                <div className="w-full bg-slate-800 h-2 rounded-full overflow-hidden">
+                                  <div
+                                    className="h-full bg-emerald-500 rounded-full transition-all duration-300"
+                                    style={{ width: `${pct}%` }}
+                                  />
+                                </div>
+                                <div className="text-[10px] text-slate-500 text-right">
+                                  Target: {formatUGX(goal)}
+                                </div>
+                              </>
+                            );
+                          })()}
+                        </div>
+
+                        {/* Quick Stats Grid */}
+                        <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-800 text-[11px]">
+                          <div className="p-2 bg-slate-950 rounded-xl border border-slate-800/80">
+                            <span className="text-slate-500 block text-[10px]">Min Stake</span>
+                            <span className="font-extrabold text-emerald-400 font-mono">
+                              {formatUGX(parseFloat(editMinStake) || 10000)}
+                            </span>
+                          </div>
+                          <div className="p-2 bg-slate-950 rounded-xl border border-slate-800/80">
+                            <span className="text-slate-500 block text-[10px]">Lockup Period</span>
+                            <span className="font-extrabold text-white">
+                              {editLockupPeriodDays || 14} Days
+                            </span>
+                          </div>
+                        </div>
+
+                        <div className="text-[10px] text-slate-400 flex items-center justify-between pt-1">
+                          <span>{editDaysLeft} days remaining</span>
+                          <span>{editInvestorsCount} investors staked</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="p-3 bg-emerald-950/30 border border-emerald-500/20 rounded-xl text-[11px] text-emerald-300 flex items-start gap-2">
+                      <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+                      <span>
+                        Edits saved here immediately update across User Dashboards, Drop Showcases, and investment calculation modals.
+                      </span>
+                    </div>
                   </div>
                 </div>
-
-                {/* Description */}
-                <div>
-                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-1.5">
-                    Detailed Brand & Project Story
-                  </label>
-                  <textarea
-                    rows={3}
-                    value={newDescription}
-                    onChange={e => setNewDescription(e.target.value)}
-                    placeholder="Describe materials, production timeline, boutique expansion, and sales channels across Uganda..."
-                    className="w-full px-4 py-2.5 bg-slate-900 border border-slate-800 rounded-xl text-xs font-medium text-white focus:outline-none focus:ring-2 focus:ring-violet-500"
-                  />
-                </div>
-
-                {/* Submit button */}
-                <div className="pt-2">
-                  <button
-                    id="admin-publish-project-btn"
-                    type="submit"
-                    disabled={isCreatingProject}
-                    className="w-full py-3.5 bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 text-white font-bold rounded-xl shadow-lg transition cursor-pointer text-sm disabled:opacity-50 flex items-center justify-center gap-2"
-                  >
-                    {isCreatingProject ? (
-                      <span>Publishing Clothing Drop...</span>
-                    ) : (
-                      <>
-                        <Sparkles className="w-4 h-4" />
-                        <span>Publish Clothing Drop to Live Platform</span>
-                      </>
-                    )}
-                  </button>
-                </div>
-              </form>
+              </div>
             </div>
           )}
         </div>

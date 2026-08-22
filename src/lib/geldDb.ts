@@ -61,24 +61,31 @@ function rowToUser(row: Record<string, unknown>): User {
 }
 
 function rowToProject(row: Record<string, unknown>): ClothingProject {
+  const gallery = Array.isArray(row.gallery_images)
+    ? (row.gallery_images as string[])
+    : row.image_url
+      ? [row.image_url as string]
+      : [];
+
   return {
     id: row.id as string,
-    title: row.title as string,
-    category: row.category as ClothingProject['category'],
-    tagline: row.tagline as string,
-    description: row.description as string,
-    imageUrl: row.image_url as string,
-    galleryImages: (row.gallery_images as string[]) || [],
-    targetGoal: row.target_goal as number,
-    raisedAmount: (row.raised_amount as number) || 0,
-    minStake: Math.min(row.min_stake as number, 10000),
-    expectedReturnRate: Number(row.expected_return_rate),
-    lockupPeriodDays: row.lockup_period_days as number,
-    periodLabel: row.period_label as string,
+    title: (row.title as string) || 'Clothing Drop',
+    category: (row.category as ClothingProject['category']) || 'Streetwear',
+    tagline: (row.tagline as string) || '',
+    description: (row.description as string) || '',
+    imageUrl: (row.image_url as string) || '',
+    galleryImages: gallery.length > 0 ? gallery : [row.image_url as string || ''],
+    targetGoal: Number(row.target_goal) || 20000000,
+    raisedAmount: Number(row.raised_amount) || 0,
+    minStake: Number(row.min_stake) || 10000,
+    expectedReturnRate: Number(row.expected_return_rate) || 50,
+    returnMultiplier: row.return_multiplier ? Number(row.return_multiplier) : undefined,
+    lockupPeriodDays: Number(row.lockup_period_days) || 14,
+    periodLabel: (row.period_label as string) || `${row.lockup_period_days || 14} Days Lockup`,
     status: (row.status as ClothingProject['status']) || 'active',
-    daysLeft: (row.days_left as number) || 0,
-    investorsCount: (row.investors_count as number) || 0,
-    featured: (row.featured as boolean) || false,
+    daysLeft: Number(row.days_left) || 30,
+    investorsCount: Number(row.investors_count) || 0,
+    featured: Boolean(row.featured),
   };
 }
 
@@ -330,6 +337,61 @@ export async function createProject(
   const updated = [newProject, ...existing];
   setLocalItem(STORAGE_PROJECTS, updated);
   return newProject;
+}
+
+export async function updateExistingProject(
+  project: ClothingProject
+): Promise<ClothingProject | null> {
+  if (isSupabaseConfigured) {
+    try {
+      const dbRow: Record<string, unknown> = {
+        id: project.id,
+        title: project.title,
+        category: project.category,
+        tagline: project.tagline,
+        description: project.description,
+        image_url: project.imageUrl,
+        gallery_images: project.galleryImages && project.galleryImages.length > 0 ? project.galleryImages : [project.imageUrl],
+        target_goal: project.targetGoal,
+        raised_amount: project.raisedAmount,
+        min_stake: project.minStake,
+        expected_return_rate: project.expectedReturnRate,
+        lockup_period_days: project.lockupPeriodDays,
+        period_label: project.periodLabel,
+        status: project.status,
+        days_left: project.daysLeft,
+        investors_count: project.investorsCount,
+        featured: Boolean(project.featured),
+      };
+
+      const { data, error } = await supabase
+        .from('geld_projects')
+        .upsert(dbRow)
+        .select()
+        .single();
+
+      if (!error && data) {
+        const updatedProj = rowToProject(data);
+        const existing = getLocalItem<ClothingProject[]>(STORAGE_PROJECTS, INITIAL_PROJECTS);
+        const updatedList = existing.map(p => p.id === project.id ? updatedProj : p);
+        if (!updatedList.some(p => p.id === project.id)) {
+          updatedList.unshift(updatedProj);
+        }
+        setLocalItem(STORAGE_PROJECTS, updatedList);
+        return updatedProj;
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  const existing = getLocalItem<ClothingProject[]>(STORAGE_PROJECTS, INITIAL_PROJECTS);
+  const updatedList = existing.map(p => (p.id === project.id ? project : p));
+  if (!updatedList.some(p => p.id === project.id)) {
+    updatedList.unshift(project);
+  }
+  setLocalItem(STORAGE_PROJECTS, updatedList);
+  return project;
 }
 
 export async function getUserInvestments(userId: string): Promise<UserInvestment[]> {

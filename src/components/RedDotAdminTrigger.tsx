@@ -2,7 +2,7 @@ import React from 'react';
 import { useApp } from '../context/AppContext';
 
 export const RedDotAdminTrigger: React.FC<{ className?: string }> = ({ className = '' }) => {
-  const { setCurrentView, signIn, currentUser } = useApp();
+  const { setCurrentView } = useApp();
 
   const handleAdminTrigger = (e: React.MouseEvent) => {
     e.stopPropagation();

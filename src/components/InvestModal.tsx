@@ -21,7 +21,7 @@ export const InvestModal: React.FC = () => {
   const expectedReturn = Math.round((numAmount * 0.125 * selectedPeriod) );
   const totalPayout = numAmount + expectedReturn;
 
-  const quickAmounts = [20000, 50000, 100000, 250000, 500000];
+  const quickAmounts = [10000, 50000, 100000, 250000, 500000];
 
   const handleInvest = async (e: React.FormEvent) => {
     e.preventDefault();

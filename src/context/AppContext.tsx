@@ -631,26 +631,48 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         const inv = updatedInvestments[i];
         if (inv.status !== 'active' || inv.userId !== currentUser.id) continue;
 
-        const createdTime = inv.createdAtTimestamp || (inv.startDate ? new Date(inv.startDate).getTime() : now);
+        // Use precise timestamp or fallback to now if not set to prevent timezone date jumps
+        const createdTime = inv.createdAtTimestamp || now;
         const msPassed = Math.max(0, now - createdTime);
         const full24hDaysElapsed = Math.floor(msPassed / DAY_MS);
-        const daysElapsed = Math.min(inv.lockupDaysTotal, full24hDaysElapsed);
+        const daysElapsed = Math.min(inv.lockupDaysTotal, Math.max(inv.daysElapsed || 0, full24hDaysElapsed));
         const progressPercentage = Math.min(100, Math.round((daysElapsed / inv.lockupDaysTotal) * 100));
         const isMatured = daysElapsed >= inv.lockupDaysTotal;
-        const currentCredited = inv.daysCredited || 0;
-        const uncreditedDays = Math.max(0, daysElapsed - currentCredited);
+
+        // Default daysCredited to existing daysElapsed if missing to avoid re-crediting past days on refresh
+        const currentCredited = inv.daysCredited !== undefined && inv.daysCredited !== null
+          ? inv.daysCredited
+          : (inv.daysElapsed || 0);
+
+        // Find genuinely uncredited full 24h days that are NOT already in transaction history
+        let uncreditedDaysCount = 0;
+        for (let d = currentCredited + 1; d <= daysElapsed; d++) {
+          const alreadyPaid = transactions.some(
+            t => t.userId === currentUser.id &&
+                 (t.id.includes(inv.id) || t.notes?.includes(inv.id) || t.notes?.includes(inv.projectTitle)) &&
+                 t.notes?.includes(`Day ${d}`)
+          );
+          if (!alreadyPaid) {
+            uncreditedDaysCount++;
+          }
+        }
+
+        const shouldRefundPrincipal = isMatured && inv.status === 'active' && !transactions.some(
+          t => t.userId === currentUser.id &&
+               (t.id.includes(`tx-matured-${inv.id}`) || (t.notes?.includes('Principal Unlocked') && t.notes?.includes(inv.projectTitle)))
+        );
 
         if (
           daysElapsed !== inv.daysElapsed ||
           progressPercentage !== inv.progressPercentage ||
-          uncreditedDays > 0 ||
+          uncreditedDaysCount > 0 ||
           (isMatured && inv.status === 'active')
         ) {
           hasUpdates = true;
 
-          if (uncreditedDays > 0) {
+          if (uncreditedDaysCount > 0) {
             const dailyRateFraction = (inv.dailyIncrementRate || 12.5) / 100;
-            const dailyYieldAmount = uncreditedDays * Math.round(inv.amountInvested * dailyRateFraction);
+            const dailyYieldAmount = uncreditedDaysCount * Math.round(inv.amountInvested * dailyRateFraction);
             totalDailyReturnsToCredit += dailyYieldAmount;
 
             newTransactions.push({
@@ -663,7 +685,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
               status: 'approved',
               createdAt: new Date().toLocaleString(),
               createdAtTimestamp: Date.now(),
-              notes: `Daily Return (+${inv.dailyIncrementRate || 12.5}% for Day ${daysElapsed} on ${inv.projectTitle})`,
+              notes: `Daily Return (+${inv.dailyIncrementRate || 12.5}% for Day ${daysElapsed} on ${inv.projectTitle} [${inv.id}])`,
               referenceId: `RET-${Math.floor(10000 + Math.random() * 90000)}`
             });
 
@@ -672,7 +694,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             );
           }
 
-          if (isMatured && inv.status === 'active') {
+          if (shouldRefundPrincipal) {
             totalPrincipalRefund += inv.amountInvested;
 
             newTransactions.push({
@@ -685,7 +707,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
               status: 'approved',
               createdAt: new Date().toLocaleString(),
               createdAtTimestamp: Date.now(),
-              notes: `Principal Unlocked (${inv.projectTitle} lockup completed)`,
+              notes: `Principal Unlocked (${inv.projectTitle} lockup completed [${inv.id}])`,
               referenceId: `PRI-${Math.floor(10000 + Math.random() * 90000)}`
             });
           }
@@ -705,8 +727,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         setInvestments(updatedInvestments);
 
         const totalCredit = totalDailyReturnsToCredit + totalPrincipalRefund;
-        const newBalance = currentUser.balance + totalCredit;
         if (totalCredit > 0) {
+          const newBalance = currentUser.balance + totalCredit;
           setCurrentUser(prev => prev ? { ...prev, balance: newBalance } : null);
           await updateUserBalanceDirect(currentUser.id, newBalance);
 
@@ -738,9 +760,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     };
 
     updateProgress();
-    const interval = setInterval(updateProgress, 10000);
+    const interval = setInterval(updateProgress, 30000);
     return () => clearInterval(interval);
-  }, [currentUser, investments, transactions]);
+  }, [currentUser?.id]);
 
   const advanceSimulationDay = async () => {
     const DAY_MS = 24 * 60 * 60 * 1000;

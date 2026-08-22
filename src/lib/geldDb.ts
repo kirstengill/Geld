@@ -90,6 +90,11 @@ function rowToProject(row: Record<string, unknown>): ClothingProject {
 }
 
 function rowToInvestment(row: Record<string, unknown>): UserInvestment {
+  const daysElapsed = Number(row.days_elapsed) || 0;
+  const daysCredited = row.days_credited !== undefined && row.days_credited !== null 
+    ? Number(row.days_credited) 
+    : daysElapsed;
+
   return {
     id: row.id as string,
     userId: row.user_id as string,
@@ -97,19 +102,19 @@ function rowToInvestment(row: Record<string, unknown>): UserInvestment {
     projectTitle: row.project_title as string,
     projectCategory: row.project_category as string,
     projectImageUrl: row.project_image_url as string,
-    amountInvested: row.amount_invested as number,
-    expectedReturnRate: Number(row.expected_return_rate),
-    expectedReturnAmount: row.expected_return_amount as number,
-    lockupDaysTotal: row.lockup_days_total as number,
-    daysElapsed: (row.days_elapsed as number) || 0,
-    dailyIncrementRate: Number(row.daily_increment_rate),
-    progressPercentage: (row.progress_percentage as number) || 0,
+    amountInvested: Number(row.amount_invested) || 0,
+    expectedReturnRate: Number(row.expected_return_rate) || 0,
+    expectedReturnAmount: Number(row.expected_return_amount) || 0,
+    lockupDaysTotal: Number(row.lockup_days_total) || 14,
+    daysElapsed,
+    dailyIncrementRate: Number(row.daily_increment_rate) || 0,
+    progressPercentage: Number(row.progress_percentage) || 0,
     startDate: row.start_date as string,
     maturityDate: row.maturity_date as string,
     status: (row.status as UserInvestment['status']) || 'active',
-    periodLabel: row.period_label as string,
-    createdAtTimestamp: (row.created_at_timestamp as number) || undefined,
-    daysCredited: (row.days_credited as number) || undefined,
+    periodLabel: (row.period_label as string) || '',
+    createdAtTimestamp: row.created_at_timestamp ? Number(row.created_at_timestamp) : (row.start_date ? new Date(row.start_date as string).getTime() : undefined),
+    daysCredited,
   };
 }
 
@@ -153,10 +158,24 @@ export async function getCurrentProfile(): Promise<User | null> {
           if (user.user_metadata?.is_admin || user.app_metadata?.is_admin) {
             profile.isAdmin = true;
           }
+          // Sync to local cache
+          const localProfiles = getLocalItem<User[]>(STORAGE_PROFILES, []);
+          const updated = [...localProfiles.filter(p => p.id !== profile.id), profile];
+          setLocalItem(STORAGE_PROFILES, updated);
           return profile;
         }
 
-        // If user authenticated in Supabase but no profile table record yet, synthesize from Supabase auth metadata
+        // Check if we have a locally cached profile for this user preserving their real balance
+        const cachedProfiles = getLocalItem<User[]>(STORAGE_PROFILES, []);
+        const cached = cachedProfiles.find(p => p.id === user.id || (user.email && p.email?.toLowerCase() === user.email.toLowerCase()));
+        if (cached) {
+          if (user.user_metadata?.is_admin || user.app_metadata?.is_admin) {
+            cached.isAdmin = true;
+          }
+          return cached;
+        }
+
+        // If user authenticated in Supabase but no profile record exists anywhere yet, synthesize from Supabase auth metadata
         const isAdmin = Boolean(
           user.user_metadata?.is_admin ||
           user.app_metadata?.is_admin

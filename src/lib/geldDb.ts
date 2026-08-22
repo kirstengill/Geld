@@ -84,8 +84,20 @@ function rowToTransaction(row: Record<string, unknown>): TransactionRequest {
 }
 
 export async function getCurrentProfile(): Promise<User | null> {
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return null;
+  const {
+    data: { user },
+    error: authError,
+  } = await supabase.auth.getUser();
+
+  if (authError) {
+    console.error('Auth user lookup failed:', authError);
+    return null;
+  }
+
+  if (!user) {
+    console.error('No authenticated Supabase user found.');
+    return null;
+  }
 
   const { data, error } = await supabase
     .from('geld_profiles')
@@ -93,7 +105,16 @@ export async function getCurrentProfile(): Promise<User | null> {
     .eq('id', user.id)
     .maybeSingle();
 
-  if (error || !data) return null;
+  if (error) {
+    console.error('Geld profile lookup failed:', error);
+    return null;
+  }
+
+  if (!data) {
+    console.error('No Geld profile found for authenticated user:', user.id);
+    return null;
+  }
+
   return rowToUser(data);
 }
 

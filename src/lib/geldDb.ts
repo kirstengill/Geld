@@ -439,8 +439,8 @@ export async function signInWithUsername(username: string, password: string): Pr
 
   const profile = await getCurrentProfile();
   if (!profile) {
-    await supabase.auth.signOut();
-    return { user: null, error: 'Account profile not found' };
+    
+    return { user: null, error: 'Account Authenticated but failed to load profile ' };
   }
 
   // Supabase is the single source of truth for auth & authorization.

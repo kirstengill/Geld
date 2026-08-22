@@ -181,7 +181,7 @@ export const AdminDashboardPage: React.FC = () => {
           'https://images.unsplash.com/photo-1441986300917-64674bd600d8?auto=format&fit=crop&w=600&q=80'
         ],
         targetGoal: parseFloat(newTargetGoal) || 20000000,
-        minStake: parseFloat(newMinStake) || 20000,
+        minStake: parseFloat(newMinStake) || 10000,
         expectedReturnRate: parseFloat(newReturnRate) || 15.0,
         lockupPeriodDays: parseInt(newLockupDays, 10) || 14,
         periodLabel: `${newLockupDays || 14} Days Lockup`,

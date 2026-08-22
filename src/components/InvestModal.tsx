@@ -6,7 +6,7 @@ import { X, TrendingUp, ShieldCheck, Clock, Sparkles, CheckCircle } from 'lucide
 export const InvestModal: React.FC = () => {
   const { selectedProjectForInvest, setSelectedProjectForInvest, investInProject, currentUser, setIsTopUpModalOpen } = useApp();
 
-  const [amount, setAmount] = useState<string>('20000');
+  const [amount, setAmount] = useState<string>('10000');
   const [selectedPeriod, setSelectedPeriod] = useState<number>(14); // 14 days default
   const [isProcessing, setIsProcessing] = useState(false);
   const [justInvested, setJustInvested] = useState(false);

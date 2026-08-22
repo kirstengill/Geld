@@ -56,7 +56,7 @@ export const UserDashboardPage: React.FC = () => {
   );
 
   // Inline investment form state
-  const [inlineStakeAmount, setInlineStakeAmount] = useState<string>('20000');
+  const [inlineStakeAmount, setInlineStakeAmount] = useState<string>('10000');
   const [inlinePeriodDays, setInlinePeriodDays] = useState<number>(14);
   const [isSubmittingStake, setIsSubmittingStake] = useState(false);
 
@@ -628,7 +628,7 @@ export const UserDashboardPage: React.FC = () => {
                         <div>
                           <label className="block text-xs font-bold text-slate-700 mb-2">Choose Stake Amount</label>
                           <div className="grid grid-cols-4 gap-1.5 mb-2">
-                            {['20000', '50000', '100000', '250000'].map(val => (
+                            {['10000','20000', '50000', '100000', '250000'].map(val => (
                               <button
                                 key={val}
                                 type="button"
@@ -652,11 +652,11 @@ export const UserDashboardPage: React.FC = () => {
                             <input
                               id="inline-stake-amount-input"
                               type="number"
-                              min={showcaseProject?.minStake || 20000}
+                              min={showcaseProject?.minStake || 10000}
                               step="1000"
                               value={inlineStakeAmount}
                               onChange={e => setInlineStakeAmount(e.target.value)}
-                              placeholder="20000"
+                              placeholder="10000"
                               className="w-full pl-14 pr-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-violet-500"
                             />
                           </div>

@@ -142,7 +142,7 @@ export const AdminDashboardPage: React.FC = () => {
   const [newDescription, setNewDescription] = useState('');
   const [newImageUrl, setNewImageUrl] = useState('https://images.unsplash.com/photo-1544441893-675973e31985?auto=format&fit=crop&w=900&q=80');
   const [newTargetGoal, setNewTargetGoal] = useState('20000000');
-  const [newMinStake, setNewMinStake] = useState('20000');
+  const [newMinStake, setNewMinStake] = useState('10000');
   const [newReturnRate, setNewReturnRate] = useState('16.5');
   const [newLockupDays, setNewLockupDays] = useState('14');
   const [isCreatingProject, setIsCreatingProject] = useState(false);
